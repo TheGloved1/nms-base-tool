@@ -5,6 +5,14 @@
 
 
 
+
+## [26.9.6] - 2026-09-16
+
+### Fixed
+
+- resolve svelte/ts/tailwind lint diagnostics
+- use non-deprecated FileBraces icons
+
 ## [26.9.5] - 2026-09-16
 
 ### Added
