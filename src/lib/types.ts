@@ -31,7 +31,7 @@ export interface DecompressResult {
 
 export interface ExportResult {
   path: string;
-  clipboard_hint: string;
+  content: string;
 }
 
 export interface ImportResult {

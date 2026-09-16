@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { open, save } from "@tauri-apps/plugin-dialog";
-  import { readTextFile } from "@tauri-apps/plugin-fs";
   import { api } from "$lib/api";
   import type { BackupInfo, BaseSummary, SaveFileInfo, TypeCounts } from "$lib/types";
   import { FONTS, THEMES, applyUiSettings, clearSaveDirOverride, loadSaveDirOverride, loadUiSettings, saveSaveDirOverride, saveUiSettings } from "$lib/settings";
@@ -264,15 +263,28 @@
     }
   }
 
+  function safeFileStem(name: string, ext: string): string {
+    const stem = name.replace(/[^\w\- ]+/g, "").trim().replace(/ /g, "_") || "base";
+    return `${stem}.${ext}`;
+  }
+
   async function doExport() {
     const b = selectedBaseObj();
     if (!b) return toastErr("Select a base first");
     try {
-      const res = await api.exportBase(b.idx);
-      const text = await readTextFile(res.path);
-      const ok = await copyText(text);
+      const dest = await save({
+        title: `Export '${b.display_name}' as JSON`,
+        defaultPath: safeFileStem(b.display_name, "json"),
+        filters: [
+          { name: "JSON", extensions: ["json"] },
+          { name: "All", extensions: ["*"] },
+        ],
+      });
+      if (!dest) return;
+      const res = await api.exportBase(b.idx, dest);
+      const ok = await copyText(res.content);
       toastOk(
-        `Exported '${b.display_name}' · ${ok ? "copied to clipboard — paste in Base Builder" : "saved to " + res.path}`,
+        `Exported '${b.display_name}' → ${res.path} · ${ok ? "copied — paste in Base Builder: Import base from NMS" : "clipboard copy failed"}`,
       );
     } catch (e) {
       toastErr(`Export failed: ${e}`);
@@ -285,13 +297,12 @@
     try {
       const dest = await save({
         title: `Export '${b.display_name}' as NMSBASE`,
-        defaultPath: `${b.display_name.replace(/[^\w\- ]+/g, "").trim().replace(/ /g, "_") || "base"}.nmsbase`,
+        defaultPath: safeFileStem(b.display_name, "nmsbase"),
         filters: [{ name: "NMSBASE", extensions: ["nmsbase", "json", "txt"] }],
       });
       if (!dest) return;
       const res = await api.exportNmsbase(b.idx, dest);
-      const text = await readTextFile(res.path);
-      const ok = await copyText(text);
+      const ok = await copyText(res.content);
       toastOk(`NMSBASE '${b.display_name}' → ${res.path} · ${ok ? "copied — paste after ^BASE_FLAG" : "file only"}`);
     } catch (e) {
       toastErr(`NMSBASE export failed: ${e}`);
@@ -302,8 +313,7 @@
     const b = selectedBaseObj();
     if (!b) return toastErr("Select a base first");
     try {
-      const res = await api.exportBase(b.idx);
-      const text = await readTextFile(res.path);
+      const text = await api.getBaseJson(b.idx);
       viewing = { title: `${b.display_name} — slot ${b.idx}`, text };
     } catch (e) {
       toastErr(`View failed: ${e}`);
@@ -320,7 +330,7 @@
     });
     if (typeof picked === "string" && picked) {
       try {
-        importText = await readTextFile(picked);
+        importText = await api.readTextFile(picked);
       } catch (e) {
         toastErr(`Read file failed: ${e}`);
       }

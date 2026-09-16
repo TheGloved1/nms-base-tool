@@ -864,14 +864,16 @@ fn list_bases(
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExportResult {
     pub path: String,
-    pub clipboard_hint: String,
+    pub content: String,
 }
 
-#[tauri::command]
-fn export_base(
-    state: tauri::State<Mutex<SaveState>>,
+/// Fetch a base plus its display-derived safe filename.
+/// Content is returned to the frontend so it never needs fs-plugin reads
+/// (the fs scope cannot cover arbitrary user-chosen paths).
+fn get_base(
+    state: &tauri::State<Mutex<SaveState>>,
     idx: usize,
-) -> Result<ExportResult, String> {
+) -> Result<(serde_json::Value, String, String), String> {
     let st = state.lock().map_err(|e| e.to_string())?;
     let save = st.save_json.as_ref().ok_or("no save loaded")?;
     let path = find_key_path(save, "PersistentPlayerBases").ok_or("bases not found")?;
@@ -879,19 +881,51 @@ fn export_base(
         .and_then(|v| v.as_array())
         .ok_or("bases not an array")?;
     let base = bases.get(idx).ok_or("base index out of range")?.clone();
-    drop(st);
-
-    let ships = state
-        .lock()
-        .map_err(|e| e.to_string())?
-        .save_json
-        .as_ref()
-        .and_then(ship_ownership_list);
+    let ships = ship_ownership_list(save);
     let disp = base_display_name(&base, idx, &ships);
     let safe = safe_name(&disp);
+    Ok((base, safe, disp))
+}
 
-    fs::create_dir_all(output_bases_dir()).map_err(|e| e.to_string())?;
-    let out = output_bases_dir().join(format!("{}.json", safe));
+#[tauri::command]
+fn get_base_json(
+    state: tauri::State<Mutex<SaveState>>,
+    idx: usize,
+) -> Result<String, String> {
+    let (base, _, _) = get_base(&state, idx)?;
+    serde_json::to_string_pretty(&base).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn read_text_file(path: String) -> Result<String, String> {
+    // std::fs has no capability-scope limits, unlike the fs plugin.
+    fs::read_to_string(PathBuf::from(shellexpand(&path))).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn export_base(
+    state: tauri::State<Mutex<SaveState>>,
+    idx: usize,
+    out_path: Option<String>,
+) -> Result<ExportResult, String> {
+    let (base, safe, _) = get_base(&state, idx)?;
+
+    let out = match out_path {
+        Some(p) => {
+            let mut pb = PathBuf::from(shellexpand(&p));
+            if pb.extension().is_none() {
+                pb.set_extension("json");
+            }
+            pb
+        }
+        None => {
+            fs::create_dir_all(output_bases_dir()).map_err(|e| e.to_string())?;
+            output_bases_dir().join(format!("{}.json", safe))
+        }
+    };
+    if let Some(parent) = out.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
     if out.exists() {
         fs::create_dir_all(backups_bases_dir()).map_err(|e| e.to_string())?;
         let bak = backups_bases_dir().join(format!("{}_backup_{}.json", safe, timestamp()));
@@ -913,7 +947,7 @@ fn export_base(
 
     Ok(ExportResult {
         path: out.to_string_lossy().to_string(),
-        clipboard_hint: format!("{} chars, paste in Base Builder: Import base from NMS", text.len()),
+        content: text,
     })
 }
 
@@ -923,23 +957,7 @@ fn export_nmsbase(
     idx: usize,
     out_path: Option<String>,
 ) -> Result<ExportResult, String> {
-    let st = state.lock().map_err(|e| e.to_string())?;
-    let save = st.save_json.as_ref().ok_or("no save loaded")?;
-    let path = find_key_path(save, "PersistentPlayerBases").ok_or("bases not found")?;
-    let bases = get_at(save, &path)
-        .and_then(|v| v.as_array())
-        .ok_or("bases not an array")?;
-    let base = bases.get(idx).ok_or("base index out of range")?.clone();
-    drop(st);
-
-    let ships = state
-        .lock()
-        .map_err(|e| e.to_string())?
-        .save_json
-        .as_ref()
-        .and_then(ship_ownership_list);
-    let disp = base_display_name(&base, idx, &ships);
-    let safe = safe_name(&disp);
+    let (base, safe, _) = get_base(&state, idx)?;
 
     let dest = match out_path {
         Some(p) => {
@@ -995,13 +1013,7 @@ fn export_nmsbase(
 
     Ok(ExportResult {
         path: dest.to_string_lossy().to_string(),
-        clipboard_hint: format!(
-            "{} objects, paste after ^BASE_FLAG",
-            base.get("Objects")
-                .and_then(|o| o.as_array())
-                .map(|a| a.len())
-                .unwrap_or(0)
-        ),
+        content: txt,
     })
 }
 
@@ -1326,6 +1338,8 @@ pub fn run() {
             list_save_subdirs,
             decompress_save,
             list_bases,
+            get_base_json,
+            read_text_file,
             export_base,
             export_nmsbase,
             import_base,

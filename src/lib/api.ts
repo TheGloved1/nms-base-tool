@@ -23,9 +23,12 @@ export const api = {
     invoke<DecompressResult>("decompress_save", { saveDir, saveFile }),
   listBases: (filter?: string | null) =>
     invoke<BaseSummary[]>("list_bases", { filter }),
-  exportBase: (idx: number) => invoke<ExportResult>("export_base", { idx }),
+  exportBase: (idx: number, outPath?: string | null) =>
+    invoke<ExportResult>("export_base", { idx, outPath }),
   exportNmsbase: (idx: number, outPath?: string | null) =>
     invoke<ExportResult>("export_nmsbase", { idx, outPath }),
+  getBaseJson: (idx: number) => invoke<string>("get_base_json", { idx }),
+  readTextFile: (path: string) => invoke<string>("read_text_file", { path }),
   importBase: (idx: number, payload: string) =>
     invoke<ImportResult>("import_base", { idx, payload }),
   recompressSave: (mode: string) => invoke<string>("recompress_save", { mode }),
