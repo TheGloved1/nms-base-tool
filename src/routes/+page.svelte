@@ -20,7 +20,8 @@
     Database,
     Download,
     Eye,
-    FileJson2,
+    FileBraces,
+    FileBracesCorner,
     FolderOpen,
     HardDriveDownload,
     Info,
@@ -801,7 +802,7 @@
           onclick={() => (exportFormat = "json")}
         >
           <div class="flex items-center gap-2 text-sm font-medium">
-            <FileJson2 class="size-4 text-primary" />Full JSON <Badge variant="default">.json</Badge>
+            <FileBraces class="size-4 text-primary" />Full JSON <Badge variant="default">.json</Badge>
           </div>
           <p class="mt-1 text-xs text-muted-foreground">
             Complete base data. Paste into Base Builder via <span class="font-medium">Import base from NMS</span>.
@@ -814,7 +815,7 @@
           onclick={() => (exportFormat = "nmsbase")}
         >
           <div class="flex items-center gap-2 text-sm font-medium">
-            <FileJson2 class="size-4 text-amber-400" />NMSBASE <Badge variant="outline">.nmsbase</Badge>
+            <FileBracesCorner class="size-4 text-amber-400" />NMSBASE <Badge variant="outline">.nmsbase</Badge>
           </div>
           <p class="mt-1 text-xs text-muted-foreground">
             Objects only. Paste into NomNom / NMSSE after the <span class="font-mono">^BASE_FLAG</span> entry.
