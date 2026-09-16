@@ -76,7 +76,7 @@
       "endpoints": [
         "https://github.com/TheGloved1/nms-save-editor/releases/latest/download/updater.json"
       ],
-      "pubkey": "TODO: generate with `bun tauri signer generate` and paste public key here"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI2RTI5MDZBRTU5MTAwOUMKUldTY0FKSGxhcERpdGpTaXFOd0o3QytqcmpzbEg0dmRwczJQVmdvczQvQ2QycWowVFF3S3lEem0K"
     }
   }
 }
