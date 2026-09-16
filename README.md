@@ -1,111 +1,85 @@
-<!-- markdownlint-disable MD013 -->
-# NMSBT — NMS Base Tool (No Man's Sky, Linux/Proton, Tauri + SvelteKit)
+# NMSBT — NMS Base Tool
 
-Tauri (Rust) + SvelteKit GUI for extracting and editing No Man's Sky bases
-(Corvettes, freighters, planetary bases) in Proton saves at
-`steamapps/compatdata/275850/...`. Ported from the Python/GTK implementation
-(removed; preserved in git history) and the Windows-only GUI from
-[NMS-Base-File-Editor](https://github.com/NightCodeOfficial/NMS-Base-File-Editor).
+Move No Man's Sky bases between saves and editing tools: pull a Corvette,
+freighter, or planetary base out of your save, tweak it in
+[djmonkeyuk's Base Builder](https://www.nexusmods.com/nomanssky/mods/2598),
+and put it back — with a backup made at every step.
 
-## What it does
+## Install
 
-- **Autodetects** save folders on Windows (Steam + GOG: `%AppData%\HelloGames\NMS`),
-  macOS (`~/Library/Application Support/HelloGames/NMS`), and Linux/Steam Deck
-  (Proton `steamapps/compatdata/275850/...`, Flatpak, snap) — Steam `st_*` and
-  GOG `DefaultUser` containers. Xbox Game Pass (`wgs` containers) is not supported.
-- **Manual location**: if nothing is detected you can pick the folder yourself;
-  it is remembered (change/reset anytime via the header or Settings). `$NMS_SAVE_DIR`
-  still overrides everything.
-- Lists `save.hg`/`save2.hg`, decompresses via `lz4_flex` + deobfuscates via
-  `MBINCompiler mapping.json` (cached 7d in `~/.local/share/nms-base-tool/.nms_mapping_cache`).
-- Lets you filter by `PlayerShipBase` (Corvette/Freighter) vs
-  `ExternalPlanetBase` (Planetary) vs Both, pick a base by `Name`, and:
+Download the latest build for your system from the
+[Releases page](https://github.com/TheGloved1/nms-base-tool/releases):
 
-  - **Export** single-base JSON for
-    [djmonkeyuk's NMS Base Builder](https://www.nexusmods.com/nomanssky/mods/2598)
-    (“Import base from NMS” → paste). Copies to clipboard + saves to
-    `output/bases/<safe>.json` and optionally
-    `~/Documents/No Mans Sky Base Builder/bases/`
-  - **Export NMSBASE** objects-only `.nmsbase` (`,\n{...}`) for NomNom/NMSSE paste after `^BASE_FLAG`
-  - **Import** edited JSON / Objects array / `.nmsbase` into the selected slot
-    (original backed up to `backups/bases/`)
-  - **Recompress** to `.hg` (keys reverse-mapped, compact JSON, `0xFEEDA1E5`
-    LZ4 blocks, atomic `.tmp`→rename, backup `*_before_recompress_*.hg`
-    when overwriting the live save)
-  - **Backup / Restore** saves (`backups/save files/`)
+- **Windows** — `.msi` installer (Steam and GOG saves)
+- **Linux / Steam Deck** — `.AppImage` or `.deb` (Proton saves)
+- **macOS** — `.dmg`
 
-## Saves location
+The app updates itself when new versions are published. Xbox Game Pass saves
+are not supported (different save format).
 
-Autodetected per platform (see above), or picked manually in the app
-(remembered until reset). `$NMS_SAVE_DIR` overrides everything:
+## Typical workflow
 
-```bash
-NMS_SAVE_DIR=/custom/path bun run tauri dev
-```
+1. **Close No Man's Sky completely.** Editing while the game runs (or with
+   Steam Cloud syncing) can undo your changes.
+2. Open NMSBT. Your saves are usually found automatically — pick one (e.g.
+   `save.hg`) and press **Load**.
+3. Find your base in the list. Use the **Corvettes / Planetary / Both**
+   filter or the search box.
+4. Press **Export**. The base is copied to your clipboard and saved to a file.
+5. In Base Builder: *Import base from NMS* → paste → make your edits →
+   *Export to NMS* → copy.
+6. Back in NMSBT, select the same slot and press **Import…** → paste → **Inject**.
+   The original is backed up first.
+7. Press **Overwrite LIVE** to write the change into your save (a backup of
+   the whole save is made first), or **Recompress** to write a separate file.
+8. Launch the game and load that save. Your edited base should be there.
 
-Proton probes in order (Linux/Deck):
+> Injecting only changes the app's memory copy — nothing touches your real
+> save until you Recompress/Overwrite.
 
-1. `$NMS_SAVE_DIR` if set and exists
-2. `~/.steam/steam/.../HelloGames/NMS`
-3. `~/.local/share/Steam/.../HelloGames/NMS` ← your install
-4. `~/.var/app/com.valvesoftware.Steam/...` (Flatpak)
-5. `~/snap/steam/...`
+## Safety built in
 
-## Run
+- Exporting never modifies anything.
+- Every import backs up the original base; every overwrite backs up the whole save.
+- The **Backup** button copies all your `save*.hg` files; **Restore…** puts one back
+  (your current file is backed up again first, just in case).
 
-```bash
-cd ~/git/nms-base-tool
-bun install
-bun run tauri dev
-# production bundle (.deb/.AppImage, plus msi/dmg on CI)
-bun run tauri build
-```
+## If your saves aren't found
 
-Needs Tauri system deps (same list as
-[NoModsSky](https://github.com/TheGloved1/NoModsSky)): on Debian
-`libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev
-libayatana-appindicator3-dev librsvg2-dev`, plus Rust via `rustup`.
-Per https://tauri.app/start/prerequisites/ and
-https://tauri.app/start/frontend/sveltekit/ the frontend is SvelteKit in SPA
-mode (`adapter-static`, `ssr = false`, `frontendDist: ../build`).
+Press **Choose folder…** (or the folder button in the top bar) and point the
+app at the folder containing your saves — picking the parent `NMS` folder also
+works, it looks inside for you. Your choice is remembered; reset it any time
+from Settings (gear icon) or the × next to the folder.
 
-Backend checks (no GUI, uses the live save read-only):
+Where saves live, for reference:
 
-```bash
-cargo test --manifest-path src-tauri/Cargo.toml
-```
+- **Windows (Steam/GOG):** `C:\Users\<you>\AppData\Roaming\HelloGames\NMS\st_…`
+- **macOS:** `~/Library/Application Support/HelloGames/NMS/st_…`
+- **Linux/Deck (Proton):** `~/.local/share/Steam/steamapps/compatdata/275850/…/HelloGames/NMS/st_…`
 
-## Release (same workflow as NoModsSky)
+## Keyboard shortcuts
 
-```bash
-bun run sync-version          # package.json -> Cargo.toml / tauri.conf.json
-bun scripts/release.ts patch  # calver bump + CHANGELOG + tag + push; CI builds
-```
+`e` export · `E` NMSBASE export · `v` view · `i` import · `r` recompress ·
+`c`/`p`/`b` Corvettes/Planetary/Both filter. Double-click a base to export it.
 
-CI (`.github/workflows/release.yml`) builds windows/linux/macos bundles on
-`v*` tags and publishes `updater.json` (signed with `TAURI_SIGNING_PRIVATE_KEY`).
+## Troubleshooting
 
-## Workflow
+- **My edit didn't show up in game** — NMS was probably open, or Steam Cloud
+  restored the old file. Close the game, disable Cloud briefly, redo the
+  Recompress step.
+- **Import says invalid JSON** — paste the exact text Base Builder's *Export
+  to NMS* gives you. Both full-base JSON and objects-only lists are accepted.
+- **Something broke** — use **Restore…** to roll back to any automatic backup.
+  Backups live in `~/.local/share/nms-base-tool/backups/` on Linux,
+  `%AppData%\nms-base-tool\backups\` on Windows, and
+  `~/Library/Application Support/nms-base-tool/backups/` on macOS.
+- **Parts of an imported build are missing** — the save needs those building
+  parts unlocked in-game.
 
-1. Pick save (e.g. `save.hg`) → `Load` (decompress + list bases)
-2. Toggle type: `Corvettes` / `Planetary` / `Both`
-3. Select base → `Export` writes `output/bases/<Name>.json` + copies; paste into Base Builder → edit → “Export to NMS” → copy
-4. Back in app: `Import` → pick file or paste JSON (supports full base JSON, Objects-only arrays, `.nmsbase` leading `,`)
-5. `Recompress` → overwrite live save (with backup) or write to `output/`
-6. `Backup` / `Restore…` for saves (manual). `Inject` is memory-only until `Recompress`.
-
-Keys: `[e]` export `[E]` NMSBASE `[v]` view `[i]` import `[r]` recompress
-`[c]/[p]/[b]` filters. App data (backups, output, mapping cache) lives in
-`~/.local/share/nms-base-tool/`. **Back up saves before editing**
-(game closed is safest).
-
-## Linux notes
-
-- Run with NMS closed when recompressing; Steam Cloud may overwrite — disable
-  briefly or restore from backup.
+Found a bug? [Open an issue](https://github.com/TheGloved1/nms-base-tool/issues).
 
 ## Credits
 
-Save format logic ported from `NMS-Base-File-Editor` (MIT, © 2025
-NightCodeOfficial) — decompression (`NMS-Save-Decoder` by Robert Maupin), key
-mapping (`MBINCompiler` monkeyman192), base editor djmonkeyuk.
+Save handling based on [NMS-Base-File-Editor](https://github.com/NightCodeOfficial/NMS-Base-File-Editor)
+(MIT) — save decoding (Robert Maupin), key mapping
+([MBINCompiler](https://github.com/monkeyman192/MBINCompiler)), base editing (djmonkeyuk).
