@@ -20,7 +20,7 @@
     Database,
     Download,
     Eye,
-    FileJson,
+    FileJson2,
     FolderOpen,
     HardDriveDownload,
     Info,
@@ -614,7 +614,7 @@
           <Search class="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input bind:value={search} placeholder="Search bases…" class="h-7 pl-7 text-xs" />
         </div>
-        <Select.Root type="single" value={sortMode} onValueChange={(v) => (sortMode = v ?? "name")}>
+        <Select.Root type="single" value={sortMode} onValueChange={(v: string) => (sortMode = v ?? "name")}>
           <Select.Trigger class="h-7 w-36 text-xs">
             <Select.Value placeholder="Sort" />
           </Select.Trigger>
@@ -781,7 +781,7 @@
         {#if t.kind === "success"}<CircleCheck class="mt-0.5 size-4 shrink-0 text-emerald-400" />
         {:else if t.kind === "error"}<CircleAlert class="mt-0.5 size-4 shrink-0 text-destructive" />
         {:else}<Info class="mt-0.5 size-4 shrink-0 text-muted-foreground" />{/if}
-        <span class="break-words">{t.msg}</span>
+        <span class="wrap-break-word">{t.msg}</span>
       </div>
     {/each}
   </div>
@@ -801,7 +801,7 @@
           onclick={() => (exportFormat = "json")}
         >
           <div class="flex items-center gap-2 text-sm font-medium">
-            <FileJson class="size-4 text-primary" />Full JSON <Badge variant="default">.json</Badge>
+            <FileJson2 class="size-4 text-primary" />Full JSON <Badge variant="default">.json</Badge>
           </div>
           <p class="mt-1 text-xs text-muted-foreground">
             Complete base data. Paste into Base Builder via <span class="font-medium">Import base from NMS</span>.
@@ -814,7 +814,7 @@
           onclick={() => (exportFormat = "nmsbase")}
         >
           <div class="flex items-center gap-2 text-sm font-medium">
-            <FileJson class="size-4 text-amber-400" />NMSBASE <Badge variant="outline">.nmsbase</Badge>
+            <FileJson2 class="size-4 text-amber-400" />NMSBASE <Badge variant="outline">.nmsbase</Badge>
           </div>
           <p class="mt-1 text-xs text-muted-foreground">
             Objects only. Paste into NomNom / NMSSE after the <span class="font-mono">^BASE_FLAG</span> entry.
@@ -831,7 +831,7 @@
   </Dialog.Root>
 
   <!-- view dialog -->
-  <Dialog.Root open={viewing !== null} onOpenChange={(o) => !o && (viewing = null)}>
+  <Dialog.Root open={viewing !== null} onOpenChange={(o: boolean) => !o && (viewing = null)}>
     <Dialog.Content class="max-h-[85vh] max-w-3xl overflow-hidden">
       <Dialog.Header>
         <Dialog.Title>{viewing?.title ?? ""}</Dialog.Title>
@@ -925,7 +925,7 @@
   </Dialog.Root>
 
   <!-- recompress confirm -->
-  <Dialog.Root open={recompressMode !== null} onOpenChange={(o) => !o && (recompressMode = null)}>
+  <Dialog.Root open={recompressMode !== null} onOpenChange={(o: boolean) => !o && (recompressMode = null)}>
     <Dialog.Content class="max-w-md">
       <Dialog.Header>
         <Dialog.Title>
