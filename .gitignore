@@ -14,3 +14,7 @@ src-tauri/target/
 backups/
 output/
 .nms_mapping_cache/
+
+# Python leftovers (implementation removed; keep ignoring strays)
+__pycache__/
+*.pyc
