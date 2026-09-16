@@ -1,5 +1,5 @@
 <!-- markdownlint-disable MD013 -->
-# nms-save-editor — No Man's Sky Save Editor (Linux/Proton, Tauri + SvelteKit)
+# NMSBT — NMS Base Tool (No Man's Sky, Linux/Proton, Tauri + SvelteKit)
 
 Tauri (Rust) + SvelteKit GUI for extracting and editing No Man's Sky bases
 (Corvettes, freighters, planetary bases) in Proton saves at
@@ -12,7 +12,7 @@ Tauri (Rust) + SvelteKit GUI for extracting and editing No Man's Sky bases
 - **Autodetects** Proton save dirs (`~/.local/share/Steam/.../HelloGames/NMS/st_*`,
   Flatpak, `~/.steam/...`, `$NMS_SAVE_DIR` override).
 - Lists `save.hg`/`save2.hg`, decompresses via `lz4_flex` + deobfuscates via
-  `MBINCompiler mapping.json` (cached 7d in `~/.local/share/nms-save-editor/.nms_mapping_cache`).
+  `MBINCompiler mapping.json` (cached 7d in `~/.local/share/nms-base-tool/.nms_mapping_cache`).
 - Lets you filter by `PlayerShipBase` (Corvette/Freighter) vs
   `ExternalPlanetBase` (Planetary) vs Both, pick a base by `Name`, and:
 
@@ -42,7 +42,7 @@ Probes in order:
 ## Run
 
 ```bash
-cd ~/git/nms-save-editor
+cd ~/git/nms-base-tool
 bun install
 bun run tauri dev
 # production bundle (.deb/.AppImage, plus msi/dmg on CI)
@@ -84,7 +84,7 @@ CI (`.github/workflows/release.yml`) builds windows/linux/macos bundles on
 
 Keys: `[e]` export `[E]` NMSBASE `[v]` view `[i]` import `[r]` recompress
 `[c]/[p]/[b]` filters. App data (backups, output, mapping cache) lives in
-`~/.local/share/nms-save-editor/`. **Back up saves before editing**
+`~/.local/share/nms-base-tool/`. **Back up saves before editing**
 (game closed is safest).
 
 ## Linux notes

@@ -63,7 +63,7 @@ fi
 
 BUNDLE_BASENAME=$(basename "$BUNDLE_FILE")
 TAG_NAME="v${PKG_VER}"
-DOWNLOAD_URL="https://github.com/TheGloved1/nms-save-editor/releases/download/${TAG_NAME}/${BUNDLE_BASENAME}"
+DOWNLOAD_URL="https://github.com/TheGloved1/nms-base-tool/releases/download/${TAG_NAME}/${BUNDLE_BASENAME}"
 PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 
 cat > "updater-${PLATFORM}.json" <<EOF

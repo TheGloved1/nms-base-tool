@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    nms_save_editor_lib::run()
+    nms_base_tool_lib::run()
 }

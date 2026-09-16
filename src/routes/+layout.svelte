@@ -4,7 +4,7 @@
 </script>
 
 <svelte:head>
-  <title>NMS Save Editor</title>
+  <title>NMSBT — NMS Base Tool</title>
 </svelte:head>
 
 <div class="flex h-screen overflow-hidden" style="background: var(--background); color: var(--foreground);">

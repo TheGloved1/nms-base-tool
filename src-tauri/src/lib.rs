@@ -21,7 +21,7 @@ use std::time::UNIX_EPOCH;
 // ---------------------------------------------------------------------------
 
 const APPID: &str = "275850";
-const APP_DIR_NAME: &str = "nms-save-editor";
+const APP_DIR_NAME: &str = "nms-base-tool";
 const SAVE_SUB: &str = "drive_c/users/steamuser/AppData/Roaming/HelloGames/NMS";
 const MAPPING_URL: &str =
     "https://github.com/monkeyman192/MBINCompiler/releases/latest/download/mapping.json";
