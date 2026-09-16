@@ -312,7 +312,7 @@
   }
 
   async function doExportNmsbase(b?: BaseSummary) {
-    b ??= selectedBaseObj();
+    b ??= selectedBaseObj() ?? undefined;
     if (!b) return toastErr("Select a base first");
     try {
       const dest = await save({
