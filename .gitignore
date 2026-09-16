@@ -10,14 +10,7 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 src-tauri/target/
 
-# Python legacy (pre-Tauri GTK/TUI implementation, kept as reference)
-.venv/
-__pycache__/
-*.pyc
-py-build/
-py-dist/
+# App data dirs (also used at runtime under ~/.local/share/nms-save-editor)
 backups/
 output/
 .nms_mapping_cache/
-.settings/
-settings/file_settings.json
