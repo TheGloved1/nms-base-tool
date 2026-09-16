@@ -48,7 +48,7 @@ Override: `NMS_SAVE_DIR=/custom/path nms-proton-gtk`
 ## Run (Tauri app - Recommended)
 
 ```bash
-cd ~/git/nms-proton-tui
+cd ~/git/nms-save-editor
 bun install
 bun run tauri dev
 # production bundle (.deb/.AppImage, plus msi/dmg on CI)
@@ -99,7 +99,7 @@ If built binary is present, `run.sh` prefers it, else falls back to `venv` GTK.
 ## Run (Dev, no binary)
 
 ```bash
-cd ~/git/nms-proton-tui
+cd ~/git/nms-save-editor
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
