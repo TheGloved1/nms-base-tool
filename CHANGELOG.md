@@ -1,5 +1,19 @@
 # Changelog
 
+
+## [26.9.1] - 2026-09-16
+
+### Added
+
+- Tauri (Rust) + SvelteKit rewrite of NMS save editor
+
+### Other
+
+- add updater public key
+- update paths for folder rename
+- remove legacy Python app, debug artifacts, and build outputs
+- drop stray pycache files, restore pyc ignores
+
 ## [26.9.0] - 2026-09-16
 
 ### Added

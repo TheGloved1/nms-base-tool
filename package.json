@@ -1,7 +1,7 @@
 {
   "name": "nms-save-editor",
   "private": true,
-  "version": "26.9.0",
+  "version": "26.9.1",
   "type": "module",
   "packageManager": "bun",
   "license": "MIT",
