@@ -17,6 +17,8 @@ export const api = {
     invoke<string | null>("find_save_dir", { prefer }),
   listSaveFiles: (saveDir: string) =>
     invoke<SaveFileInfo[]>("list_save_files", { saveDir }),
+  listSaveSubdirs: (saveDir: string) =>
+    invoke<string[]>("list_save_subdirs", { saveDir }),
   decompressSave: (saveDir: string, saveFile: string) =>
     invoke<DecompressResult>("decompress_save", { saveDir, saveFile }),
   listBases: (filter?: string | null) =>

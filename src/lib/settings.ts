@@ -54,3 +54,21 @@ export async function saveUiSettings(s: UiSettings): Promise<void> {
   await store.set("nmsbt-font", s.font);
   await store.save();
 }
+
+export async function loadSaveDirOverride(): Promise<string | null> {
+  try {
+    return (await store.get<string>("nmsbt-save-dir")) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveSaveDirOverride(dir: string): Promise<void> {
+  await store.set("nmsbt-save-dir", dir);
+  await store.save();
+}
+
+export async function clearSaveDirOverride(): Promise<void> {
+  await store.delete("nmsbt-save-dir");
+  await store.save();
+}

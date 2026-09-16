@@ -4,7 +4,7 @@
   import { readTextFile } from "@tauri-apps/plugin-fs";
   import { api } from "$lib/api";
   import type { BackupInfo, BaseSummary, SaveFileInfo, TypeCounts } from "$lib/types";
-  import { FONTS, THEMES, applyUiSettings, loadUiSettings, saveUiSettings } from "$lib/settings";
+  import { FONTS, THEMES, applyUiSettings, clearSaveDirOverride, loadSaveDirOverride, loadUiSettings, saveSaveDirOverride, saveUiSettings } from "$lib/settings";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Badge } from "$lib/components/ui/badge";
@@ -30,10 +30,12 @@
     Search,
     Settings,
     Upload,
+    X,
   } from "lucide-svelte";
 
   // --- saves ---
   let saveDir: string | null = $state(null);
+  let saveDirManual = $state(false);
   let saveFiles: SaveFileInfo[] = $state([]);
   let selectedSave: string | null = $state(null);
   let loading = $state(false);
@@ -150,13 +152,44 @@
   }
 
   async function detectDir() {
+    // 1. remembered manual location wins (persisted in settings store)
+    try {
+      const manual = await loadSaveDirOverride();
+      if (manual) {
+        const files = await api.listSaveFiles(manual).catch(() => []);
+        if (files.length) {
+          saveDir = manual;
+          saveDirManual = true;
+          await refreshSaves();
+          status = "Ready. Select a save, then press Load.";
+          return;
+        }
+        // maybe they picked the parent NMS folder — drill into first child with saves
+        const kids = await api.listSaveSubdirs(manual).catch(() => []);
+        for (const kid of kids) {
+          const kf = await api.listSaveFiles(kid).catch(() => []);
+          if (kf.length) {
+            saveDir = kid;
+            saveDirManual = true;
+            await refreshSaves();
+            toastOk(`Using saves found in ${kid.split("/").slice(-1)}`);
+            return;
+          }
+        }
+        toastErr(`Remembered save folder has no saves: ${manual} — pick again or reset to auto`);
+      }
+    } catch (e) {
+      toastErr(`Saved location failed: ${e}`);
+    }
+    // 2. platform autodetect (Proton/Steam/GOG/macOS — see README)
     try {
       saveDir = await api.findSaveDir(null);
+      saveDirManual = false;
       if (!saveDir) {
         const dirs = await api.findSaveDirs();
         status = dirs.length
           ? "No save with .hg found"
-          : "No Proton save dir found — set NMS_SAVE_DIR or Change dir";
+          : "No save folder detected — choose it manually";
         return;
       }
       await refreshSaves();
@@ -167,15 +200,49 @@
   }
 
   async function doChangeDir() {
-    const picked = await open({ directory: true, title: "Select save directory (st_…)" });
+    const picked = await open({ directory: true, title: "Select save folder (st_… or DefaultUser)" });
     if (typeof picked === "string" && picked) {
-      saveDir = picked;
+      let dir = picked;
+      // parent NMS folder picked? drill into first child that has saves
+      const direct = await api.listSaveFiles(dir).catch(() => []);
+      if (!direct.length) {
+        const kids = await api.listSaveSubdirs(dir).catch(() => []);
+        for (const kid of kids) {
+          const kf = await api.listSaveFiles(kid).catch(() => []);
+          if (kf.length) {
+            dir = kid;
+            toastOk(`Using saves found in ${kid.split("/").slice(-1)}`);
+            break;
+          }
+        }
+      }
+      saveDir = dir;
+      saveDirManual = true;
+      try {
+        await saveSaveDirOverride(dir);
+      } catch (e) {
+        toastErr(`Could not remember location: ${e}`);
+      }
       selectedSave = null;
       bases = [];
       selectedBase = null;
       counts = null;
       await refreshSaves();
+      if (!saveFiles.length) toastErr("No save*.hg files in that folder — try the st_… folder itself");
     }
+  }
+
+  async function resetSaveDir() {
+    try {
+      await clearSaveDirOverride();
+    } catch {}
+    saveDir = null;
+    saveDirManual = false;
+    selectedSave = null;
+    bases = [];
+    selectedBase = null;
+    counts = null;
+    await detectDir();
   }
 
   async function doLoad() {
@@ -392,13 +459,26 @@
     <button
       class="flex min-w-0 items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
       onclick={doChangeDir}
-      title={saveDir ?? "No save dir — click to choose"}
+      title={saveDir ? `${saveDir}${saveDirManual ? " (manual — click to change)" : " (auto-detected — click to override)"}` : "No save dir — click to choose"}
     >
       <FolderOpen class="size-3.5 shrink-0" />
       <span class="max-w-110 truncate font-mono">
         {saveDir ? saveDir.split("/").slice(-2).join("/") : "No save dir"}
       </span>
+      {#if saveDirManual}
+        <Badge variant="default" class="h-4 px-1 text-[10px]">manual</Badge>
+      {/if}
     </button>
+    {#if saveDirManual}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        onclick={resetSaveDir}
+        title="Forget manual folder, go back to auto-detect"
+      >
+        <X class="size-3.5" />
+      </Button>
+    {/if}
     <div class="ml-auto flex items-center gap-2">
       {#if counts}
         <div class="hidden items-center gap-1.5 md:flex">
@@ -536,11 +616,22 @@
                 {/if}
               </Empty.Description>
             </Empty.Header>
-            {#if !loading && saveDir}
+            {#if !loading && !saveDir}
               <Empty.Content>
-                <Button size="sm" onclick={doLoad} disabled={!selectedSave}>
-                  <Download class="size-3.5" />Load {selectedSave ?? "save"}
+                <Button size="sm" onclick={doChangeDir}>
+                  <FolderOpen class="size-3.5" />Choose save folder…
                 </Button>
+              </Empty.Content>
+            {:else if !loading && saveDir}
+              <Empty.Content>
+                <div class="flex justify-center gap-2">
+                  <Button size="sm" onclick={doLoad} disabled={!selectedSave}>
+                    <Download class="size-3.5" />Load {selectedSave ?? "save"}
+                  </Button>
+                  <Button size="sm" variant="outline" onclick={doChangeDir}>
+                    <FolderOpen class="size-3.5" />Choose folder…
+                  </Button>
+                </div>
               </Empty.Content>
             {/if}
           </Empty.Root>
@@ -794,9 +885,33 @@
   <Dialog.Root bind:open={settingsOpen}>
     <Dialog.Content class="max-w-sm">
       <Dialog.Header>
-        <Dialog.Title>Appearance</Dialog.Title>
-        <Dialog.Description>Theme and font apply instantly and are remembered.</Dialog.Description>
+        <Dialog.Title>Settings</Dialog.Title>
+        <Dialog.Description>Save location, theme, and font.</Dialog.Description>
       </Dialog.Header>
+      <div>
+        <div class="mb-1 text-xs font-medium">Save location {saveDirManual ? "(manual)" : "(auto-detected)"}</div>
+        <div class="rounded-md border border-border bg-background px-2 py-1.5 font-mono text-[11px] break-all">
+          {saveDir ?? "Not detected yet"}
+        </div>
+        <div class="mt-1.5 flex gap-2">
+          <Button size="sm" variant="outline" class="flex-1" onclick={doChangeDir}>
+            <FolderOpen class="size-3.5" />Choose…
+          </Button>
+          {#if saveDirManual}
+            <Button
+              size="sm"
+              variant="ghost"
+              class="flex-1"
+              onclick={() => {
+                resetSaveDir();
+              }}
+            >
+              Reset to auto
+            </Button>
+          {/if}
+        </div>
+      </div>
+      <Separator />
       <div class="flex flex-col gap-3 py-1">
         <div>
           <div class="mb-1 text-xs font-medium">Theme</div>

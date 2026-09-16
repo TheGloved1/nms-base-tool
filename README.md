@@ -9,8 +9,13 @@ Tauri (Rust) + SvelteKit GUI for extracting and editing No Man's Sky bases
 
 ## What it does
 
-- **Autodetects** Proton save dirs (`~/.local/share/Steam/.../HelloGames/NMS/st_*`,
-  Flatpak, `~/.steam/...`, `$NMS_SAVE_DIR` override).
+- **Autodetects** save folders on Windows (Steam + GOG: `%AppData%\HelloGames\NMS`),
+  macOS (`~/Library/Application Support/HelloGames/NMS`), and Linux/Steam Deck
+  (Proton `steamapps/compatdata/275850/...`, Flatpak, snap) — Steam `st_*` and
+  GOG `DefaultUser` containers. Xbox Game Pass (`wgs` containers) is not supported.
+- **Manual location**: if nothing is detected you can pick the folder yourself;
+  it is remembered (change/reset anytime via the header or Settings). `$NMS_SAVE_DIR`
+  still overrides everything.
 - Lists `save.hg`/`save2.hg`, decompresses via `lz4_flex` + deobfuscates via
   `MBINCompiler mapping.json` (cached 7d in `~/.local/share/nms-base-tool/.nms_mapping_cache`).
 - Lets you filter by `PlayerShipBase` (Corvette/Freighter) vs
@@ -29,9 +34,16 @@ Tauri (Rust) + SvelteKit GUI for extracting and editing No Man's Sky bases
     when overwriting the live save)
   - **Backup / Restore** saves (`backups/save files/`)
 
-## Saves location (autodetect only)
+## Saves location
 
-Probes in order:
+Autodetected per platform (see above), or picked manually in the app
+(remembered until reset). `$NMS_SAVE_DIR` overrides everything:
+
+```bash
+NMS_SAVE_DIR=/custom/path bun run tauri dev
+```
+
+Proton probes in order (Linux/Deck):
 
 1. `$NMS_SAVE_DIR` if set and exists
 2. `~/.steam/steam/.../HelloGames/NMS`

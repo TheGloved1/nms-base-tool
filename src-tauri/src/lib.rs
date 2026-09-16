@@ -105,29 +105,54 @@ struct SaveState {
 // ---------------------------------------------------------------------------
 
 fn candidate_roots() -> Vec<PathBuf> {
-    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/home/gloves"));
-    let raw = vec![
-        home.join(".local/share/Steam/steamapps/compatdata")
-            .join(APPID)
-            .join("pfx")
-            .join(SAVE_SUB),
-        home.join(".steam/steam/steamapps/compatdata")
-            .join(APPID)
-            .join("pfx")
-            .join(SAVE_SUB),
-        home.join(".var/app/com.valvesoftware.Steam/data/Steam/steamapps/compatdata")
-            .join(APPID)
-            .join("pfx")
-            .join(SAVE_SUB),
-        home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/compatdata")
-            .join(APPID)
-            .join("pfx")
-            .join(SAVE_SUB),
-        home.join("snap/steam/common/.local/share/Steam/steamapps/compatdata")
-            .join(APPID)
-            .join("pfx")
-            .join(SAVE_SUB),
-    ];
+    let mut raw: Vec<PathBuf> = Vec::new();
+    // Native storefront locations (Windows/macOS builds)
+    #[cfg(target_os = "windows")]
+    {
+        // Steam + GOG: %AppData%\HelloGames\NMS (st_* / DefaultUser inside)
+        if let Some(roaming) = dirs::data_dir() {
+            raw.push(roaming.join("HelloGames").join("NMS"));
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // Steam: ~/Library/Application Support/HelloGames/NMS
+        if let Some(home) = dirs::home_dir() {
+            raw.push(
+                home.join("Library")
+                    .join("Application Support")
+                    .join("HelloGames")
+                    .join("NMS"),
+            );
+        }
+    }
+    // Linux / Steam Deck: Proton prefix(es) for appid 275850
+    {
+        let h = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/home/gloves"));
+        raw.extend([
+            h.join(".local/share/Steam/steamapps/compatdata")
+                .join(APPID)
+                .join("pfx")
+                .join(SAVE_SUB),
+            h.join(".steam/steam/steamapps/compatdata")
+                .join(APPID)
+                .join("pfx")
+                .join(SAVE_SUB),
+            h.join(".var/app/com.valvesoftware.Steam/data/Steam/steamapps/compatdata")
+                .join(APPID)
+                .join("pfx")
+                .join(SAVE_SUB),
+            h.join(".var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/compatdata")
+                .join(APPID)
+                .join("pfx")
+                .join(SAVE_SUB),
+            h.join("snap/steam/common/.local/share/Steam/steamapps/compatdata")
+                .join(APPID)
+                .join("pfx")
+                .join(SAVE_SUB),
+        ]);
+    }
+    // dedupe preserve order
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for p in raw {
@@ -148,6 +173,22 @@ fn shellexpand(s: &str) -> String {
     s.to_string()
 }
 
+fn dir_has_saves(d: &Path) -> bool {
+    fs::read_dir(d)
+        .map(|entries| {
+            entries.filter_map(|e| e.ok()).any(|e| {
+                let n = e.file_name().to_string_lossy().to_string();
+                n.starts_with("save") && n.ends_with(".hg") && e.path().is_file()
+            })
+        })
+        .unwrap_or(false)
+}
+
+fn is_save_container(name: &str) -> bool {
+    // Steam: st_<steamid> · GOG/legacy: DefaultUser
+    name.contains("st_") || name == "DefaultUser"
+}
+
 fn find_save_dirs_inner() -> Vec<PathBuf> {
     let mut found = Vec::new();
     for root in candidate_roots() {
@@ -159,9 +200,13 @@ fn find_save_dirs_inner() -> Vec<PathBuf> {
             Err(_) => continue,
         };
         for entry in entries.filter_map(|e| e.ok()) {
+            let p = entry.path();
+            if !p.is_dir() {
+                continue;
+            }
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.contains("st_") && entry.path().is_dir() {
-                found.push(entry.path());
+            if is_save_container(&name) || dir_has_saves(&p) {
+                found.push(p);
             }
         }
     }
@@ -196,15 +241,7 @@ fn find_save_dir_inner(prefer: Option<String>) -> Option<PathBuf> {
         return None;
     }
     for d in &dirs {
-        let has_hg = fs::read_dir(d)
-            .map(|entries| {
-                entries.filter_map(|e| e.ok()).any(|e| {
-                    let n = e.file_name().to_string_lossy().to_string();
-                    n.starts_with("save") && n.ends_with(".hg")
-                })
-            })
-            .unwrap_or(false);
-        if has_hg {
+        if dir_has_saves(d) {
             return Some(d.clone());
         }
     }
@@ -719,6 +756,30 @@ fn find_save_dir(prefer: Option<String>) -> Option<String> {
 #[tauri::command]
 fn list_save_files(save_dir: String) -> Vec<SaveFileInfo> {
     list_save_files_inner(Path::new(&shellexpand(&save_dir)))
+}
+
+#[tauri::command]
+fn list_save_subdirs(save_dir: String) -> Vec<String> {
+    // Child folders that look like save containers (for when the user picks
+    // the parent HelloGames/NMS folder instead of the st_*/DefaultUser dir).
+    let dir = PathBuf::from(shellexpand(&save_dir));
+    let mut out = Vec::new();
+    let entries = match fs::read_dir(&dir) {
+        Ok(e) => e,
+        Err(_) => return out,
+    };
+    for entry in entries.filter_map(|e| e.ok()) {
+        let p = entry.path();
+        if !p.is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        if is_save_container(&name) || dir_has_saves(&p) {
+            out.push(p.to_string_lossy().to_string());
+        }
+    }
+    out.sort();
+    out
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1262,6 +1323,7 @@ pub fn run() {
             find_save_dirs,
             find_save_dir,
             list_save_files,
+            list_save_subdirs,
             decompress_save,
             list_bases,
             export_base,
