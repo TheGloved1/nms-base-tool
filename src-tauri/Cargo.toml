@@ -1,6 +1,6 @@
 [package]
 name = "nms-base-tool"
-version = "26.9.4"
+version = "26.9.5"
 description = "No Man's Sky save editor — Tauri + SvelteKit"
 authors = ["TheGloved1"]
 license = "MIT"

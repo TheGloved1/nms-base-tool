@@ -4,6 +4,18 @@
 
 
 
+
+## [26.9.5] - 2026-09-16
+
+### Added
+
+- export format picker dialog replaces NMSBASE button
+
+### Fixed
+
+- exports use save dialog + backend file IO, drop fs-plugin reads
+- null/undefined mismatch in export helper
+
 ## [26.9.4] - 2026-09-16
 
 ### Added
