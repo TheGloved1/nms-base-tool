@@ -3,6 +3,17 @@
 
 
 
+
+## [26.9.4] - 2026-09-16
+
+### Added
+
+- cross-platform save detection + remembered manual location
+
+### Other
+
+- rewrite README for end users
+
 ## [26.9.3] - 2026-09-16
 
 ### Added
