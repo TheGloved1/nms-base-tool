@@ -1,7 +1,7 @@
 {
   "name": "nms-base-tool",
   "private": true,
-  "version": "26.9.2",
+  "version": "26.9.3",
   "type": "module",
   "packageManager": "bun",
   "license": "MIT",

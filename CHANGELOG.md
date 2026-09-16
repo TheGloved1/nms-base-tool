@@ -2,6 +2,17 @@
 
 
 
+
+## [26.9.3] - 2026-09-16
+
+### Added
+
+- overhaul UI with NoModsSky shadcn theme system
+
+### Fixed
+
+- page root fills viewport width (flex-1)
+
 ## [26.9.2] - 2026-09-16
 
 ### Other
