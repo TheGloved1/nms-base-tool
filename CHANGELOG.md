@@ -1,6 +1,13 @@
 # Changelog
 
 
+
+## [26.9.2] - 2026-09-16
+
+### Other
+
+- rename to nms-base-tool (NMSBT)
+
 ## [26.9.1] - 2026-09-16
 
 ### Added
