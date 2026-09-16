@@ -4,32 +4,80 @@
   import { readTextFile } from "@tauri-apps/plugin-fs";
   import { api } from "$lib/api";
   import type { BackupInfo, BaseSummary, SaveFileInfo, TypeCounts } from "$lib/types";
+  import { FONTS, THEMES, applyUiSettings, loadUiSettings, saveUiSettings } from "$lib/settings";
+  import { Button } from "$lib/components/ui/button";
+  import { Input } from "$lib/components/ui/input";
+  import { Badge } from "$lib/components/ui/badge";
+  import * as Dialog from "$lib/components/ui/dialog";
+  import * as Table from "$lib/components/ui/table";
+  import { Textarea } from "$lib/components/ui/textarea";
+  import { Separator } from "$lib/components/ui/separator";
+  import * as Empty from "$lib/components/ui/empty";
+  import * as Select from "$lib/components/ui/select";
+  import {
+    CircleAlert,
+    CircleCheck,
+    Copy,
+    Database,
+    Download,
+    Eye,
+    FileJson,
+    FolderOpen,
+    HardDriveDownload,
+    Info,
+    LoaderCircle,
+    Save,
+    Search,
+    Settings,
+    Upload,
+  } from "lucide-svelte";
 
+  // --- saves ---
   let saveDir: string | null = $state(null);
   let saveFiles: SaveFileInfo[] = $state([]);
   let selectedSave: string | null = $state(null);
   let loading = $state(false);
 
+  // --- bases ---
   let bases: BaseSummary[] = $state([]);
   let filter: "Both" | "Corvettes" | "Planetary" = $state("Both");
   let counts: TypeCounts | null = $state(null);
   let selectedBase: number | null = $state(null);
+  let search = $state("");
+  let sortMode = $state("name");
 
+  // --- status + toasts ---
   let status = $state("Ready. Autodetecting Proton dir…");
-  let actionStatus = $state("");
+  interface Toast {
+    id: number;
+    kind: "success" | "error" | "info";
+    msg: string;
+  }
+  let toasts: Toast[] = $state([]);
+  let toastId = 0;
+  function pushToast(kind: Toast["kind"], msg: string) {
+    const id = ++toastId;
+    toasts = [...toasts, { id, kind, msg }];
+    status = msg;
+    setTimeout(() => {
+      toasts = toasts.filter((t) => t.id !== id);
+    }, 6000);
+  }
+  const toastOk = (m: string) => pushToast("success", m);
+  const toastErr = (m: string) => pushToast("error", m);
 
-  // modals
+  // --- dialogs ---
   let viewing: { title: string; text: string } | null = $state(null);
   let importing = $state(false);
   let importText = $state("");
+  let importingBusy = $state(false);
   let restoring = $state(false);
   let backups: BackupInfo[] = $state([]);
   let selectedBackup: string | null = $state(null);
-
-  function toast(msg: string) {
-    actionStatus = msg;
-    status = msg;
-  }
+  let recompressMode: "output" | "overwrite" | null = $state(null);
+  let settingsOpen = $state(false);
+  let theme = $state("default");
+  let font = $state("inter");
 
   async function copyText(t: string): Promise<boolean> {
     try {
@@ -40,6 +88,54 @@
     }
   }
 
+  // --- derived list ---
+  let shown = $derived.by(() => {
+    let list = [...bases];
+    if (filter === "Corvettes") list = list.filter((b) => b.base_type === "PlayerShipBase");
+    else if (filter === "Planetary")
+      list = list.filter((b) => b.base_type === "HomePlanetBase" || b.base_type === "ExternalPlanetBase");
+    const q = search.trim().toLowerCase();
+    if (q)
+      list = list.filter((b) =>
+        `${b.display_name} ${b.name} ${b.base_type}`.toLowerCase().includes(q),
+      );
+    if (sortMode === "objects") list.sort((a, b) => b.objects - a.objects);
+    else if (sortMode === "type")
+      list.sort(
+        (a, b) => a.base_type.localeCompare(b.base_type) || a.display_name.localeCompare(b.display_name),
+      );
+    else list.sort((a, b) => a.display_name.localeCompare(b.display_name));
+    return list;
+  });
+  $effect(() => {
+    if (shown.length && !shown.some((b) => b.idx === selectedBase)) selectedBase = shown[0].idx;
+    if (!shown.length) selectedBase = null;
+  });
+
+  function selectedBaseObj(): BaseSummary | null {
+    return bases.find((b) => b.idx === selectedBase) ?? null;
+  }
+
+  function typeBadgeVariant(t: string): "default" | "secondary" | "outline" {
+    if (t === "PlayerShipBase") return "default";
+    if (t === "HomePlanetBase" || t === "ExternalPlanetBase") return "secondary";
+    return "outline";
+  }
+  function typeBadgeClass(t: string): string {
+    if (t === "HomePlanetBase" || t === "ExternalPlanetBase")
+      return "border-emerald-500/40 text-emerald-400";
+    if (t === "FreighterBase") return "border-amber-500/40 text-amber-400";
+    return "";
+  }
+  function shortType(t: string): string {
+    if (t === "PlayerShipBase") return "Corvette";
+    if (t === "HomePlanetBase" || t === "ExternalPlanetBase") return "Planetary";
+    if (t === "FreighterBase") return "Freighter";
+    if (t === "PlayerSpaceBase") return "Space";
+    return t;
+  }
+
+  // --- actions ---
   async function refreshSaves() {
     if (!saveDir) return;
     try {
@@ -49,7 +145,7 @@
       }
       status = `${saveFiles.length} save(s) in ${saveDir}`;
     } catch (e) {
-      toast(`List saves failed: ${e}`);
+      toastErr(`List saves failed: ${e}`);
     }
   }
 
@@ -58,13 +154,15 @@
       saveDir = await api.findSaveDir(null);
       if (!saveDir) {
         const dirs = await api.findSaveDirs();
-        status = dirs.length ? `No save with .hg found` : "No Proton save dir found — set NMS_SAVE_DIR or Change dir";
+        status = dirs.length
+          ? "No save with .hg found"
+          : "No Proton save dir found — set NMS_SAVE_DIR or Change dir";
         return;
       }
       await refreshSaves();
-      if (selectedSave) status = `Ready. Select save → Load.`;
+      if (selectedSave) status = "Ready. Select a save, then press Load.";
     } catch (e) {
-      status = `Autodetect failed: ${e}`;
+      toastErr(`Autodetect failed: ${e}`);
     }
   }
 
@@ -82,7 +180,7 @@
 
   async function doLoad() {
     if (!saveDir || !selectedSave) {
-      toast("No save selected");
+      toastErr("No save selected");
       return;
     }
     loading = true;
@@ -91,70 +189,57 @@
       const res = await api.decompressSave(saveDir, selectedSave);
       bases = res.bases;
       counts = res.counts;
-      selectedBase = bases.length ? 0 : null;
-      applyFilter();
-      status = `Loaded ${selectedSave}: ${bases.length} bases ✓ backup ${res.backup_path.split("/").pop()}`;
+      toastOk(`Loaded ${selectedSave}: ${bases.length} bases · backup ${res.backup_path.split("/").pop()}`);
     } catch (e) {
-      toast(`Load failed: ${e}`);
+      toastErr(`Load failed: ${e}`);
     } finally {
       loading = false;
     }
   }
 
-  let shown: BaseSummary[] = $state([]);
-  function applyFilter() {
-    if (filter === "Corvettes") shown = bases.filter((b) => b.base_type === "PlayerShipBase");
-    else if (filter === "Planetary")
-      shown = bases.filter((b) => b.base_type === "HomePlanetBase" || b.base_type === "ExternalPlanetBase");
-    else shown = [...bases];
-    if (shown.length && !shown.some((b) => b.idx === selectedBase)) selectedBase = shown[0].idx;
-    if (!shown.length) selectedBase = null;
-  }
-
-  function selectedBaseObj(): BaseSummary | null {
-    return bases.find((b) => b.idx === selectedBase) ?? null;
-  }
-
   async function doExport() {
     const b = selectedBaseObj();
-    if (!b) return toast("Select a base first");
+    if (!b) return toastErr("Select a base first");
     try {
       const res = await api.exportBase(b.idx);
       const text = await readTextFile(res.path);
       const ok = await copyText(text);
-      toast(`Exported '${b.display_name}' → ${res.path} | ${ok ? "copied to clipboard" : "clipboard failed — file saved"} — paste in Base Builder: Import base from NMS`);
+      toastOk(
+        `Exported '${b.display_name}' · ${ok ? "copied to clipboard — paste in Base Builder" : "saved to " + res.path}`,
+      );
     } catch (e) {
-      toast(`Export failed: ${e}`);
+      toastErr(`Export failed: ${e}`);
     }
   }
 
   async function doExportNmsbase() {
     const b = selectedBaseObj();
-    if (!b) return toast("Select a base first");
+    if (!b) return toastErr("Select a base first");
     try {
       const dest = await save({
         title: `Export '${b.display_name}' as NMSBASE`,
         defaultPath: `${b.display_name.replace(/[^\w\- ]+/g, "").trim().replace(/ /g, "_") || "base"}.nmsbase`,
         filters: [{ name: "NMSBASE", extensions: ["nmsbase", "json", "txt"] }],
       });
+      if (!dest) return;
       const res = await api.exportNmsbase(b.idx, dest);
       const text = await readTextFile(res.path);
       const ok = await copyText(text);
-      toast(`NMSBASE '${b.display_name}' → ${res.path} | ${ok ? "copied" : "file only"} — paste after ^BASE_FLAG`);
+      toastOk(`NMSBASE '${b.display_name}' → ${res.path} · ${ok ? "copied — paste after ^BASE_FLAG" : "file only"}`);
     } catch (e) {
-      toast(`NMSBASE export failed: ${e}`);
+      toastErr(`NMSBASE export failed: ${e}`);
     }
   }
 
   async function doView() {
     const b = selectedBaseObj();
-    if (!b) return toast("Select a base first");
+    if (!b) return toastErr("Select a base first");
     try {
       const res = await api.exportBase(b.idx);
       const text = await readTextFile(res.path);
-      viewing = { title: `${b.display_name} — slot ${b.idx} • ${text.length} chars`, text };
+      viewing = { title: `${b.display_name} — slot ${b.idx}`, text };
     } catch (e) {
-      toast(`View failed: ${e}`);
+      toastErr(`View failed: ${e}`);
     }
   }
 
@@ -170,16 +255,16 @@
       try {
         importText = await readTextFile(picked);
       } catch (e) {
-        toast(`Read file failed: ${e}`);
+        toastErr(`Read file failed: ${e}`);
       }
     }
   }
 
   async function doImport() {
     const b = selectedBaseObj();
-    if (!b) return toast("Select target base to replace first");
-    if (!importText.trim()) return toast("Paste JSON or pick a file first");
-    if (!confirm(`Inject into slot ${b.idx} ('${b.display_name}')? Original will be backed up.`)) return;
+    if (!b) return toastErr("Select target base to replace first");
+    if (!importText.trim()) return toastErr("Paste JSON or pick a file first");
+    importingBusy = true;
     try {
       const res = await api.importBase(b.idx, importText);
       importing = false;
@@ -194,34 +279,36 @@
         else if (x.base_type === "PlayerSpaceBase") c.space++;
       }
       counts = c;
-      applyFilter();
-      toast(`Injected into slot ${res.idx} ('${b.display_name}', ${res.objects} objs) — backup saved — now Recompress to write .hg`);
+      toastOk(
+        `Injected ${res.objects} objects into '${b.display_name}' · original backed up — now Recompress to write .hg`,
+      );
     } catch (e) {
-      toast(`Inject failed: ${e}`);
+      toastErr(`Inject failed: ${e}`);
+    } finally {
+      importingBusy = false;
     }
   }
 
-  async function doRecompress(mode: string) {
-    if (!selectedSave) return toast("No save loaded");
-    const label = mode === "overwrite" ? "OVERWRITE LIVE SAVE" : "write to output/";
-    if (!confirm(`Recompress '${selectedSave}'? ${label}. Close NMS before overwriting!`)) return;
-    if (mode === "overwrite" && !confirm(`Really overwrite ${selectedSave}? A backup will be made first.`)) return;
+  async function doRecompress() {
+    if (!recompressMode || !selectedSave) return;
+    const mode = recompressMode;
+    recompressMode = null;
     try {
-      status = `Recompressing…`;
+      status = "Recompressing…";
       const out = await api.recompressSave(mode);
-      toast(`Recompressed → ${out} ✓`);
+      toastOk(`Recompressed → ${out}`);
     } catch (e) {
-      toast(`Recompress failed: ${e}`);
+      toastErr(`Recompress failed: ${e}`);
     }
   }
 
   async function doBackup() {
-    if (!saveDir) return toast("No save dir");
+    if (!saveDir) return toastErr("No save dir");
     try {
       const paths = await api.backupSaves(saveDir);
-      toast(`Backed up ${paths.length} file(s) ✓`);
+      toastOk(`Backed up ${paths.length} save file(s)`);
     } catch (e) {
-      toast(`Backup failed: ${e}`);
+      toastErr(`Backup failed: ${e}`);
     }
   }
 
@@ -232,14 +319,13 @@
     } catch {
       backups = await api.listBackups(null);
     }
-    if (!backups.length) return toast("No backups found");
+    if (!backups.length) return toastErr("No backups found");
     selectedBackup = backups[0].path;
     restoring = true;
   }
 
   async function doRestore() {
     if (!selectedBackup || !saveDir || !selectedSave) return;
-    if (!confirm(`Restore '${selectedSave}' from backup? Current live file will be backed up first. Close NMS!`)) return;
     try {
       await api.restoreSave(selectedBackup, saveDir, selectedSave);
       restoring = false;
@@ -247,163 +333,501 @@
       selectedBase = null;
       counts = null;
       await refreshSaves();
-      toast(`Restored '${selectedSave}' ✓ — Load again to inspect`);
+      toastOk(`Restored '${selectedSave}' — press Load to inspect`);
     } catch (e) {
-      toast(`Restore failed: ${e}`);
+      toastErr(`Restore failed: ${e}`);
     }
+  }
+
+  async function onThemeChange(v: string) {
+    theme = v ?? "default";
+    applyUiSettings(theme, font);
+    await saveUiSettings({ theme, font });
+  }
+  async function onFontChange(v: string) {
+    font = v ?? "inter";
+    applyUiSettings(theme, font);
+    await saveUiSettings({ theme, font });
   }
 
   function onKey(e: KeyboardEvent) {
     const t = e.target as HTMLElement;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+    if (viewing || importing || restoring || recompressMode || settingsOpen) return;
     if (e.key === "e") doExport();
     else if (e.key === "E") doExportNmsbase();
     else if (e.key === "v") doView();
-    else if (e.key === "i") (importing = true);
-    else if (e.key === "r") doRecompress("output");
-    else if (e.key === "c") (filter = "Corvettes", applyFilter());
-    else if (e.key === "p") (filter = "Planetary", applyFilter());
-    else if (e.key === "b") (filter = "Both", applyFilter());
-    else if (e.key === "Enter" && document.activeElement?.id === "saves-list") doLoad();
+    else if (e.key === "i") importing = true;
+    else if (e.key === "r") recompressMode = "output";
+    else if (e.key === "c") filter = "Corvettes";
+    else if (e.key === "p") filter = "Planetary";
+    else if (e.key === "b") filter = "Both";
   }
 
   onMount(() => {
+    (async () => {
+      try {
+        const s = await loadUiSettings();
+        theme = s.theme;
+        font = s.font;
+      } catch {}
+    })();
     detectDir();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
 </script>
 
-<div class="flex flex-1 min-h-0">
-  <!-- Left panel -->
-  <div class="flex flex-col gap-2 p-2 overflow-y-auto" style="width: 340px; border-right: 1px solid var(--border);">
-    <div class="text-xs font-semibold uppercase tracking-wide" style="color: var(--muted-foreground);">Save dir</div>
-    <div class="text-xs break-all select-all" style="color: var(--muted-foreground);">{saveDir ?? "[no dir found]"}</div>
-
-    <div class="text-xs font-semibold uppercase tracking-wide" style="color: var(--muted-foreground);">Saves</div>
-    <div id="saves-list" class="overflow-auto border rounded" style="max-height: 150px; border-color: var(--border);" tabindex="0" role="listbox" aria-label="Saves" onkeydown={(e) => { if (e.key === "Enter") doLoad(); }}>
-      <table>
-        <thead><tr><th>Save</th><th>Size</th><th>Modified</th></tr></thead>
-        <tbody>
-          {#each saveFiles as f}
-            <tr class:selected={f.name === selectedSave} onclick={() => (selectedSave = f.name)} ondblclick={doLoad} role="option" aria-selected={f.name === selectedSave} tabindex="0" onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectedSave = f.name; } }}>
-              <td>{f.name}</td><td>{f.size_display}</td><td>{f.modified}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+<div class="flex h-screen flex-col bg-background text-foreground">
+  <!-- header -->
+  <header class="flex h-13 shrink-0 items-center gap-3 border-b border-border bg-card px-4 py-2">
+    <div class="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-xs font-black text-primary-foreground">
+      BT
     </div>
-
-    <div class="flex gap-2 justify-center">
-      <button class:selected={filter === "Corvettes"} onclick={() => (filter = "Corvettes", applyFilter())} class="px-2 py-1 text-xs rounded border" style="border-color: var(--border);">Corvettes [c]</button>
-      <button onclick={() => (filter = "Planetary", applyFilter())} class="px-2 py-1 text-xs rounded border" style="border-color: var(--border);">Planetary [p]</button>
-      <button onclick={() => (filter = "Both", applyFilter())} class="px-2 py-1 text-xs rounded border" style="border-color: var(--border);">Both [b]</button>
+    <div class="leading-tight">
+      <div class="text-sm font-semibold tracking-tight">NMSBT</div>
+      <div class="text-[11px] text-muted-foreground">NMS Base Tool</div>
     </div>
-    {#if counts}
-      <div class="text-xs" style="color: var(--muted-foreground);">
-        Showing {shown.length}/{bases.length} — Ship:{counts.ship} Planet:{counts.planet} Freighter:{counts.freighter} Space:{counts.space} — Total objs: {counts.total_objs}
-      </div>
-    {/if}
-
-    <div class="flex gap-2 justify-center">
-      <button onclick={doLoad} disabled={loading || !selectedSave} class="px-3 py-1 text-sm rounded font-semibold" style="background: var(--primary); color: var(--primary-foreground); opacity: {loading || !selectedSave ? 0.5 : 1};">{loading ? "Loading…" : "Load"}</button>
-      <button onclick={doChangeDir} class="px-3 py-1 text-sm rounded border" style="border-color: var(--border);">Change dir</button>
+    <Separator orientation="vertical" class="mx-1 h-6" />
+    <button
+      class="flex min-w-0 items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+      onclick={doChangeDir}
+      title={saveDir ?? "No save dir — click to choose"}
+    >
+      <FolderOpen class="size-3.5 shrink-0" />
+      <span class="max-w-110 truncate font-mono">
+        {saveDir ? saveDir.split("/").slice(-2).join("/") : "No save dir"}
+      </span>
+    </button>
+    <div class="ml-auto flex items-center gap-2">
+      {#if counts}
+        <div class="hidden items-center gap-1.5 md:flex">
+          <Badge variant="default">{counts.ship} ship</Badge>
+          <Badge variant="secondary" class="border-emerald-500/40 text-emerald-400">{counts.planet} planet</Badge>
+          <Badge variant="outline" class="border-amber-500/40 text-amber-400">{counts.freighter} fr</Badge>
+          <Badge variant="outline">{counts.total_objs.toLocaleString()} objs</Badge>
+        </div>
+      {/if}
+      <Button variant="ghost" size="icon-sm" onclick={() => (settingsOpen = true)} title="Appearance">
+        <Settings class="size-4" />
+      </Button>
     </div>
-    <div class="flex gap-2 justify-center">
-      <button onclick={doBackup} class="px-3 py-1 text-sm rounded border" style="border-color: var(--border);">Backup</button>
-      <button onclick={openRestore} class="px-3 py-1 text-sm rounded border" style="border-color: var(--border);">Restore…</button>
-    </div>
-    <div class="text-xs" style="color: var(--muted-foreground);">{saveFiles.length} save(s){selectedSave ? ` • selected ${selectedSave}` : ""}</div>
-  </div>
+  </header>
 
-  <!-- Right panel -->
-  <div class="flex flex-col flex-1 min-w-0 gap-2 p-2">
-    <div class="text-xs font-semibold uppercase tracking-wide" style="color: var(--muted-foreground);">Bases — pick one to Export → Base Builder ({shown.length} shown, filter: {filter})</div>
-    <div class="flex-1 overflow-auto border rounded" style="border-color: var(--border);">
-      <table>
-        <thead><tr><th>Idx</th><th>Name</th><th>Type</th><th>Objects</th><th>Owner UID</th></tr></thead>
-        <tbody>
-          {#each shown as b}
-            <tr class:selected={b.idx === selectedBase} onclick={() => (selectedBase = b.idx)} ondblclick={doExport} role="button" tabindex="0" onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectedBase = b.idx; } }}>
-              <td>{b.idx}</td><td class="max-w-60 truncate" title={b.display_name}>{b.display_name}</td><td>{b.base_type}</td><td>{b.objects}</td><td class="font-mono text-xs">{b.owner_uid.slice(0, 10)}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-      {#if !shown.length}<div class="p-8 text-center text-sm" style="color: var(--muted-foreground);">{bases.length ? "No bases match filter" : "Load a save to list bases"}</div>{/if}
-    </div>
-
-    <div class="flex gap-2 justify-center flex-wrap">
-      <button onclick={doExport} class="px-3 py-1 text-sm rounded font-semibold" style="background: var(--primary); color: var(--primary-foreground);">Export [e]</button>
-      <button onclick={doExportNmsbase} class="px-3 py-1 text-sm rounded border" style="border-color: var(--border);">NMSBASE [E]</button>
-      <button onclick={doView} class="px-3 py-1 text-sm rounded border" style="border-color: var(--border);">View [v]</button>
-      <button onclick={() => (importing = true)} class="px-3 py-1 text-sm rounded border" style="border-color: var(--destructive); color: #fca5a5;">Import [i]</button>
-      <button onclick={() => doRecompress("output")} class="px-3 py-1 text-sm rounded border" style="border-color: var(--destructive); color: #fca5a5;">Recompress [r]</button>
-      <button onclick={() => doRecompress("overwrite")} class="px-3 py-1 text-sm rounded border" style="border-color: var(--destructive); color: #fca5a5;">Overwrite LIVE</button>
-    </div>
-    <div class="text-xs break-all select-all" style="color: var(--muted-foreground);">{actionStatus}</div>
-  </div>
-</div>
-
-<div class="shrink-0 px-2 py-1 text-xs border-t" style="border-color: var(--border); color: var(--muted-foreground);">{status}</div>
-
-<!-- View modal -->
-{#if viewing}
-  <div class="fixed inset-0 flex items-center justify-center p-8" style="background: rgba(0,0,0,0.7);" role="dialog" aria-modal="true" aria-label="Base JSON">
-    <div class="flex flex-col gap-2 p-4 rounded w-full h-full overflow-hidden" style="background: var(--card);">
-      <div class="font-semibold">{viewing.title}</div>
-      <pre class="flex-1 overflow-auto text-xs font-mono p-2 rounded" style="background: var(--background);">{viewing.text}</pre>
-      <div class="flex gap-2 justify-center">
-        <button onclick={async () => { await copyText(viewing?.text ?? ""); viewing = null; }} class="px-3 py-1 text-sm rounded font-semibold" style="background: var(--primary); color: var(--primary-foreground);">Copy & Close</button>
-        <button onclick={() => (viewing = null)} class="px-3 py-1 text-sm rounded border" style="border-color: var(--border);">Close</button>
-      </div>
-    </div>
-  </div>
-{/if}
-
-<!-- Import modal -->
-{#if importing}
-  <div class="fixed inset-0 flex items-center justify-center p-8" style="background: rgba(0,0,0,0.7);" role="dialog" aria-modal="true" aria-label="Import JSON">
-    <div class="flex flex-col gap-2 p-4 rounded w-full h-full overflow-hidden" style="background: var(--card);">
-      <div class="font-semibold">Paste JSON / Objects array for slot {selectedBase} ('{selectedBaseObj()?.display_name ?? ""}')</div>
-      <div class="text-xs" style="color: var(--muted-foreground);">Objects-only arrays and .nmsbase leading-comma text are supported.</div>
-      <textarea bind:value={importText} class="flex-1 font-mono text-xs p-2 rounded" style="background: var(--background); color: var(--foreground); border: 1px solid var(--border);" placeholder='Paste here, or pick a file…'></textarea>
-      <div class="flex gap-2 justify-center">
-        <button onclick={doPickImportFile} class="px-3 py-1 text-sm rounded border" style="border-color: var(--border);">Pick file…</button>
-        <button onclick={doImport} class="px-3 py-1 text-sm rounded font-semibold" style="background: var(--primary); color: var(--primary-foreground);">Import</button>
-        <button onclick={() => (importing = false)} class="px-3 py-1 text-sm rounded border" style="border-color: var(--border);">Cancel</button>
-      </div>
-    </div>
-  </div>
-{/if}
-
-<!-- Restore modal -->
-{#if restoring}
-  <div class="fixed inset-0 flex items-center justify-center p-8" style="background: rgba(0,0,0,0.7);" role="dialog" aria-modal="true" aria-label="Restore backup">
-    <div class="flex flex-col gap-2 p-4 rounded w-full max-w-2xl max-h-full overflow-hidden" style="background: var(--card);">
-      <div class="font-semibold">Restore '{selectedSave}' — pick a backup (live file will be backed up again; close NMS first!)</div>
-      <div class="overflow-auto border rounded" style="border-color: var(--border);">
-        <table>
-          <thead><tr><th>Backup file</th><th>Size</th><th>Modified</th></tr></thead>
-          <tbody>
-            {#each backups as bk}
-              <tr class:selected={bk.path === selectedBackup} onclick={() => (selectedBackup = bk.path)} role="button" tabindex="0" onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectedBackup = bk.path; } }}>
-                <td class="font-mono text-xs">{bk.name}</td><td>{bk.size_display}</td><td>{bk.modified}</td>
-              </tr>
+  <div class="flex min-h-0 flex-1">
+    <!-- sidebar -->
+    <aside class="flex w-70 shrink-0 flex-col gap-3 overflow-y-auto border-r border-border bg-card p-3">
+      <section>
+        <div class="mb-1.5 flex items-center justify-between">
+          <h2 class="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">Saves</h2>
+          <span class="text-[11px] text-muted-foreground">{saveFiles.length}</span>
+        </div>
+        {#if saveFiles.length === 0}
+          <div class="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+            No save files found.<br />Check the save folder above.
+          </div>
+        {:else}
+          <div class="flex flex-col gap-1">
+            {#each saveFiles as f}
+              <button
+                class="rounded-lg border px-2.5 py-1.5 text-left transition {f.name === selectedSave
+                  ? 'border-primary bg-primary/10'
+                  : 'border-border bg-background hover:bg-muted'}"
+                onclick={() => (selectedSave = f.name)}
+                ondblclick={doLoad}
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <span class="truncate text-[13px] font-medium">{f.name}</span>
+                  <span class="shrink-0 font-mono text-[11px] text-muted-foreground">{f.size_display}</span>
+                </div>
+                <div class="font-mono text-[11px] text-muted-foreground">{f.modified}</div>
+              </button>
             {/each}
-          </tbody>
-        </table>
-      </div>
-      <div class="flex gap-2 justify-center">
-        <button onclick={doRestore} class="px-3 py-1 text-sm rounded font-semibold" style="background: var(--destructive); color: white;">Restore</button>
-        <button onclick={() => (restoring = false)} class="px-3 py-1 text-sm rounded border" style="border-color: var(--border);">Cancel</button>
-      </div>
-    </div>
-  </div>
-{/if}
+          </div>
+        {/if}
+        <div class="mt-2 flex gap-2">
+          <Button class="flex-1" size="sm" onclick={doLoad} disabled={loading || !selectedSave}>
+            {#if loading}<LoaderCircle class="size-3.5 animate-spin" />Loading…{:else}<Download class="size-3.5" />Load{/if}
+          </Button>
+          <Button variant="outline" size="sm" onclick={doChangeDir} title="Change save directory">
+            <FolderOpen class="size-3.5" />
+          </Button>
+        </div>
+      </section>
 
-<style>
-  button.selected {
-    outline: 2px solid var(--primary);
-  }
-</style>
+      <Separator />
+
+      <section>
+        <h2 class="mb-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">Filter</h2>
+        <div class="grid grid-cols-3 gap-1 rounded-lg border border-border bg-background p-1">
+          {#each [["Corvettes", "c"], ["Planetary", "p"], ["Both", "b"]] as [label, key]}
+            <button
+              class="rounded-md px-1 py-1 text-xs font-medium transition {filter === label
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
+              onclick={() => (filter = label as typeof filter)}
+              title="Shortcut [{key}]"
+            >
+              {label}
+            </button>
+          {/each}
+        </div>
+        {#if counts}
+          <p class="mt-1.5 text-[11px] text-muted-foreground">
+            Showing {shown.length}/{bases.length} · Ship {counts.ship} · Planet {counts.planet} ·
+            Freighter {counts.freighter} · Space {counts.space}
+          </p>
+        {/if}
+      </section>
+
+      <Separator />
+
+      <section>
+        <h2 class="mb-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">Save safety</h2>
+        <div class="flex gap-2">
+          <Button variant="outline" size="sm" class="flex-1" onclick={doBackup}>
+            <Save class="size-3.5" />Backup
+          </Button>
+          <Button variant="outline" size="sm" class="flex-1" onclick={openRestore}>
+            <HardDriveDownload class="size-3.5" />Restore…
+          </Button>
+        </div>
+        <p class="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+          Close NMS before overwriting a live save. Steam Cloud can revert edits — disable it briefly.
+        </p>
+      </section>
+    </aside>
+
+    <!-- main -->
+    <main class="flex min-w-0 flex-1 flex-col">
+      <div class="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
+        <div class="relative max-w-xs flex-1">
+          <Search class="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input bind:value={search} placeholder="Search bases…" class="h-7 pl-7 text-xs" />
+        </div>
+        <Select.Root type="single" value={sortMode} onValueChange={(v) => (sortMode = v ?? "name")}>
+          <Select.Trigger class="h-7 w-36 text-xs">
+            <Select.Value placeholder="Sort" />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item value="name">Name A–Z</Select.Item>
+            <Select.Item value="objects">Most objects</Select.Item>
+            <Select.Item value="type">Type</Select.Item>
+          </Select.Content>
+        </Select.Root>
+        <span class="ml-auto hidden text-xs text-muted-foreground sm:inline">{shown.length} shown</span>
+      </div>
+
+      <div class="min-h-0 flex-1 overflow-auto">
+        {#if bases.length === 0}
+          <Empty.Root class="mx-auto mt-16 max-w-sm border-0">
+            <Empty.Header>
+              <Empty.Media variant="icon">
+                <Database />
+              </Empty.Media>
+              <Empty.Title>{loading ? "Decompressing save…" : "No save loaded"}</Empty.Title>
+              <Empty.Description>
+                {#if loading}
+                  Reading LZ4 blocks and deobfuscating keys — this takes a few seconds.
+                {:else if !saveDir}
+                  No Proton save directory found. Point the app at your <span class="font-mono">st_…</span> folder.
+                {:else}
+                  Pick a save on the left and press Load to list its bases.
+                {/if}
+              </Empty.Description>
+            </Empty.Header>
+            {#if !loading && saveDir}
+              <Empty.Content>
+                <Button size="sm" onclick={doLoad} disabled={!selectedSave}>
+                  <Download class="size-3.5" />Load {selectedSave ?? "save"}
+                </Button>
+              </Empty.Content>
+            {/if}
+          </Empty.Root>
+        {:else if shown.length === 0}
+          <Empty.Root class="mx-auto mt-16 max-w-sm border-0">
+            <Empty.Header>
+              <Empty.Media variant="icon">
+                <Search />
+              </Empty.Media>
+              <Empty.Title>No matches</Empty.Title>
+              <Empty.Description>
+                Nothing matches "{search}" in this filter. Try clearing the search or switching to Both.
+              </Empty.Description>
+            </Empty.Header>
+            <Empty.Content>
+              <Button
+                size="sm"
+                variant="outline"
+                onclick={() => {
+                  search = "";
+                  filter = "Both";
+                }}
+              >
+                Clear search & filter
+              </Button>
+            </Empty.Content>
+          </Empty.Root>
+        {:else}
+          <Table.Root>
+            <Table.Header>
+              <Table.Row>
+                <Table.Head class="w-10">Idx</Table.Head>
+                <Table.Head>Name</Table.Head>
+                <Table.Head class="w-28">Type</Table.Head>
+                <Table.Head class="w-20 text-right">Objects</Table.Head>
+                <Table.Head class="w-28">Owner</Table.Head>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {#each shown as b}
+                <Table.Row
+                  class="cursor-pointer {b.idx === selectedBase ? 'bg-primary/10 hover:bg-primary/15' : ''}"
+                  onclick={() => (selectedBase = b.idx)}
+                  ondblclick={doExport}
+                >
+                  <Table.Cell class="font-mono text-muted-foreground">{b.idx}</Table.Cell>
+                  <Table.Cell>
+                    <div class="truncate font-medium" title={b.display_name}>{b.display_name}</div>
+                    {#if b.name && b.name !== b.display_name}
+                      <div class="truncate font-mono text-[11px] text-muted-foreground" title={b.name}>
+                        {b.name}
+                      </div>
+                    {/if}
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Badge variant={typeBadgeVariant(b.base_type)} class={typeBadgeClass(b.base_type)}>
+                      {shortType(b.base_type)}
+                    </Badge>
+                  </Table.Cell>
+                  <Table.Cell class="text-right font-mono">{b.objects.toLocaleString()}</Table.Cell>
+                  <Table.Cell class="font-mono text-xs text-muted-foreground">
+                    {b.owner_uid ? b.owner_uid.slice(0, 10) : "—"}
+                  </Table.Cell>
+                </Table.Row>
+              {/each}
+            </Table.Body>
+          </Table.Root>
+        {/if}
+      </div>
+
+      <!-- action bar -->
+      <div class="flex shrink-0 flex-wrap items-center gap-2 border-t border-border bg-card px-3 py-2">
+        <Button size="sm" onclick={doExport} disabled={selectedBase === null} title="Shortcut [e]">
+          <Upload class="size-3.5" />Export
+        </Button>
+        <Button size="sm" variant="outline" onclick={doExportNmsbase} disabled={selectedBase === null} title="Shortcut [E]">
+          <FileJson class="size-3.5" />NMSBASE
+        </Button>
+        <Button size="sm" variant="outline" onclick={doView} disabled={selectedBase === null} title="Shortcut [v]">
+          <Eye class="size-3.5" />View
+        </Button>
+        <Button size="sm" variant="outline" onclick={() => (importing = true)} disabled={selectedBase === null} title="Shortcut [i]">
+          <Download class="size-3.5" />Import…
+        </Button>
+        <div class="ml-auto flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onclick={() => (recompressMode = "output")}
+            disabled={selectedBase === null}
+            title="Shortcut [r]"
+          >
+            Recompress
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            onclick={() => (recompressMode = "overwrite")}
+            disabled={selectedBase === null}
+          >
+            Overwrite LIVE
+          </Button>
+        </div>
+      </div>
+      <div class="shrink-0 truncate border-t border-border px-3 py-1 font-mono text-[11px] text-muted-foreground">
+        {status}
+      </div>
+    </main>
+  </div>
+
+  <!-- toasts -->
+  <div class="pointer-events-none fixed right-3 bottom-8 z-50 flex w-100 max-w-[calc(100vw-1.5rem)] flex-col gap-2">
+    {#each toasts as t}
+      <div
+        class="pointer-events-auto flex items-start gap-2 rounded-lg border bg-card p-2.5 text-xs shadow-lg {t.kind === 'success'
+          ? 'border-emerald-500/40'
+          : t.kind === 'error'
+            ? 'border-destructive/50'
+            : 'border-border'}"
+      >
+        {#if t.kind === "success"}<CircleCheck class="mt-0.5 size-4 shrink-0 text-emerald-400" />
+        {:else if t.kind === "error"}<CircleAlert class="mt-0.5 size-4 shrink-0 text-destructive" />
+        {:else}<Info class="mt-0.5 size-4 shrink-0 text-muted-foreground" />{/if}
+        <span class="break-words">{t.msg}</span>
+      </div>
+    {/each}
+  </div>
+
+  <!-- view dialog -->
+  <Dialog.Root open={viewing !== null} onOpenChange={(o) => !o && (viewing = null)}>
+    <Dialog.Content class="max-h-[85vh] max-w-3xl overflow-hidden">
+      <Dialog.Header>
+        <Dialog.Title>{viewing?.title ?? ""}</Dialog.Title>
+        <Dialog.Description>Full base JSON as stored in the save.</Dialog.Description>
+      </Dialog.Header>
+      <pre class="max-h-[55vh] overflow-auto rounded-md border border-border bg-background p-3 font-mono text-[11px] break-all whitespace-pre-wrap">{viewing?.text ?? ""}</pre>
+      <Dialog.Footer>
+        <Button
+          variant="outline"
+          onclick={() => (viewing = null)}
+        >
+          Close
+        </Button>
+        <Button
+          onclick={async () => {
+            if (await copyText(viewing?.text ?? "")) toastOk("Base JSON copied to clipboard");
+            viewing = null;
+          }}
+        >
+          <Copy class="size-3.5" />Copy & close
+        </Button>
+      </Dialog.Footer>
+    </Dialog.Content>
+  </Dialog.Root>
+
+  <!-- import dialog -->
+  <Dialog.Root bind:open={importing}>
+    <Dialog.Content class="max-h-[85vh] max-w-2xl overflow-hidden">
+      <Dialog.Header>
+        <Dialog.Title>Import into '{selectedBaseObj()?.display_name ?? ""}' (slot {selectedBase})</Dialog.Title>
+        <Dialog.Description>
+          Replaces the base's objects. The original is backed up automatically. Full base JSON,
+          objects-only arrays, and .nmsbase leading-comma text are all accepted.
+        </Dialog.Description>
+      </Dialog.Header>
+      <Textarea
+        bind:value={importText}
+        rows={14}
+        class="font-mono text-xs"
+        placeholder="Paste base JSON here, or pick a file…"
+      />
+      <Dialog.Footer class="sm:justify-between">
+        <Button variant="ghost" onclick={doPickImportFile}>Pick file…</Button>
+        <div class="flex gap-2">
+          <Button variant="outline" onclick={() => (importing = false)}>Cancel</Button>
+          <Button onclick={doImport} disabled={!importText.trim() || importingBusy}>
+            {#if importingBusy}<LoaderCircle class="size-3.5 animate-spin" />Injecting…{:else}Inject{/if}
+          </Button>
+        </div>
+      </Dialog.Footer>
+    </Dialog.Content>
+  </Dialog.Root>
+
+  <!-- restore dialog -->
+  <Dialog.Root bind:open={restoring}>
+    <Dialog.Content class="max-h-[85vh] max-w-2xl overflow-hidden">
+      <Dialog.Header>
+        <Dialog.Title>Restore '{selectedSave}'</Dialog.Title>
+        <Dialog.Description>
+          The current live file is backed up again before restoring. Close NMS first!
+        </Dialog.Description>
+      </Dialog.Header>
+      <div class="max-h-[50vh] overflow-auto rounded-md border border-border">
+        <Table.Root>
+          <Table.Header>
+            <Table.Row>
+              <Table.Head>Backup file</Table.Head>
+              <Table.Head class="w-20">Size</Table.Head>
+              <Table.Head class="w-36">Modified</Table.Head>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {#each backups as bk}
+              <Table.Row
+                class="cursor-pointer {bk.path === selectedBackup ? 'bg-primary/10 hover:bg-primary/15' : ''}"
+                onclick={() => (selectedBackup = bk.path)}
+              >
+                <Table.Cell class="font-mono text-xs">{bk.name}</Table.Cell>
+                <Table.Cell>{bk.size_display}</Table.Cell>
+                <Table.Cell class="font-mono text-xs">{bk.modified}</Table.Cell>
+              </Table.Row>
+            {/each}
+          </Table.Body>
+        </Table.Root>
+      </div>
+      <Dialog.Footer>
+        <Button variant="outline" onclick={() => (restoring = false)}>Cancel</Button>
+        <Button variant="destructive" onclick={doRestore}>Restore selected</Button>
+      </Dialog.Footer>
+    </Dialog.Content>
+  </Dialog.Root>
+
+  <!-- recompress confirm -->
+  <Dialog.Root open={recompressMode !== null} onOpenChange={(o) => !o && (recompressMode = null)}>
+    <Dialog.Content class="max-w-md">
+      <Dialog.Header>
+        <Dialog.Title>
+          {recompressMode === "overwrite" ? "Overwrite live save?" : "Write recompressed save?"}
+        </Dialog.Title>
+        <Dialog.Description>
+          {#if recompressMode === "overwrite"}
+            Writes directly over <span class="font-mono">{selectedSave}</span>. A
+            <span class="font-mono">*_before_recompress_*.hg</span> backup is made first. Make sure NMS is closed —
+            Steam Cloud can revert the change.
+          {:else}
+            Writes a recompressed copy of <span class="font-mono">{selectedSave}</span> to the output folder,
+            leaving the live save untouched.
+          {/if}
+        </Dialog.Description>
+      </Dialog.Header>
+      <Dialog.Footer>
+        <Button variant="outline" onclick={() => (recompressMode = null)}>Cancel</Button>
+        <Button variant={recompressMode === "overwrite" ? "destructive" : "default"} onclick={doRecompress}>
+          {recompressMode === "overwrite" ? "Overwrite LIVE" : "Write to output/"}
+        </Button>
+      </Dialog.Footer>
+    </Dialog.Content>
+  </Dialog.Root>
+
+  <!-- settings dialog -->
+  <Dialog.Root bind:open={settingsOpen}>
+    <Dialog.Content class="max-w-sm">
+      <Dialog.Header>
+        <Dialog.Title>Appearance</Dialog.Title>
+        <Dialog.Description>Theme and font apply instantly and are remembered.</Dialog.Description>
+      </Dialog.Header>
+      <div class="flex flex-col gap-3 py-1">
+        <div>
+          <div class="mb-1 text-xs font-medium">Theme</div>
+          <Select.Root type="single" value={theme} onValueChange={onThemeChange}>
+            <Select.Trigger class="w-full">
+              <Select.Value placeholder="Theme" />
+            </Select.Trigger>
+            <Select.Content>
+              {#each THEMES as t}
+                <Select.Item value={t.id}>{t.label}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
+        <div>
+          <div class="mb-1 text-xs font-medium">Font</div>
+          <Select.Root type="single" value={font} onValueChange={onFontChange}>
+            <Select.Trigger class="w-full">
+              <Select.Value placeholder="Font" />
+            </Select.Trigger>
+            <Select.Content>
+              {#each FONTS as f}
+                <Select.Item value={f.id}>{f.label}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
+      </div>
+      <Dialog.Footer>
+        <Button onclick={() => (settingsOpen = false)}>Done</Button>
+      </Dialog.Footer>
+    </Dialog.Content>
+  </Dialog.Root>
+</div>

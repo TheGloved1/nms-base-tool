@@ -1,66 +1,119 @@
-@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Geist:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&family=Manrope:wght@400;500;600&family=Sora:wght@400;600&family=Outfit:wght@400;500&display=swap');
+@import 'tailwindcss';
 
-:root {
-  --background: #09090b;
-  --foreground: #fafafa;
-  --card: #18181b;
-  --muted: #27272a;
-  --muted-foreground: #a1a1aa;
-  --border: #27272a;
-  --primary: #7c3aed;
-  --primary-foreground: #fafafa;
-  --destructive: #dc2626;
+@theme {
+  --color-nms-bg: #0a0f1a;
+  --color-nms-panel: #111b2d;
+  --color-nms-panel-hover: #1a2a45;
+  --color-nms-border: #1e3356;
+  --color-nms-border-light: #2a4a7a;
+  --color-nms-accent: #00d4ff;
+  --color-nms-accent-dim: #0099cc;
+  --color-nms-gold: #ff8c00;
+  --color-nms-gold-dim: #cc7000;
+  --color-nms-text: #e6f1ff;
+  --color-nms-text-dim: #8ea0c0;
+  --color-nms-text-muted: #5a6d8a;
+  --color-nms-danger: #ff3344;
+  --color-nms-success: #00e676;
+  --color-background: #0a0f1a;
+  --color-foreground: #e6f1ff;
+  --color-card: #111b2d;
+  --color-card-foreground: #e6f1ff;
+  --color-popover: #111b2d;
+  --color-popover-foreground: #e6f1ff;
+  --color-primary: #00d4ff;
+  --color-primary-foreground: #0a0f1a;
+  --color-secondary: #111b2d;
+  --color-secondary-foreground: #e6f1ff;
+  --color-muted: #1a2a45;
+  --color-muted-foreground: #8ea0c0;
+  --color-accent: #1a2a45;
+  --color-accent-foreground: #e6f1ff;
+  --color-destructive: #ff3344;
+  --color-destructive-foreground: #e6f1ff;
+  --color-border: #1e3356;
+  --color-input: #1e3356;
+  --color-ring: #00d4ff;
+  --radius: 0.5rem;
 }
 
-html,
+* { scrollbar-width: thin; scrollbar-color: var(--color-nms-border-light) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-nms-border-light); border-radius: 4px; }
+
+/* Font presets */
+[data-font="inter"] { --font-sans: 'Inter', system-ui, sans-serif; }
+[data-font="jetbrains"] { --font-sans: 'JetBrains Mono', ui-monospace, monospace; }
+[data-font="geist"] { --font-sans: 'Geist Sans', system-ui, sans-serif; }
+[data-font="space"] { --font-sans: 'Space Grotesk', system-ui, sans-serif; }
+[data-font="manrope"] { --font-sans: 'Manrope', system-ui, sans-serif; }
+[data-font="sora"] { --font-sans: 'Sora', system-ui, sans-serif; }
+
+/* Theme overrides — Rose Pine & Catppuccin flavors */
+[data-theme="rose-pine"] {
+  --color-nms-bg: #191724; --color-nms-panel: #1f1d2e; --color-nms-panel-hover: #26233a;
+  --color-nms-border: #26233a; --color-nms-border-light: #403d52;
+  --color-nms-accent: #eb6f92; --color-nms-accent-dim: #b4637a;
+  --color-nms-gold: #f6c177; --color-nms-text: #e0def4; --color-nms-text-dim: #908caa; --color-nms-text-muted: #6e6a86;
+  --color-background: #191724; --color-foreground: #e0def4; --color-card: #1f1d2e; --color-card-foreground: #e0def4;
+  --color-popover: #1f1d2e; --color-popover-foreground: #e0def4; --color-primary: #eb6f92; --color-primary-foreground: #191724;
+  --color-secondary: #26233a; --color-secondary-foreground: #e0def4; --color-muted: #26233a; --color-muted-foreground: #908caa;
+  --color-border: #26233a; --color-input: #26233a; --color-ring: #eb6f92;
+}
+[data-theme="rose-pine-moon"] {
+  --color-nms-bg: #232136; --color-nms-panel: #2a273f; --color-nms-panel-hover: #393552;
+  --color-nms-border: #393552; --color-nms-border-light: #56526e;
+  --color-nms-accent: #ea9a97; --color-nms-gold: #f6c177; --color-nms-text: #e0def4; --color-nms-text-dim: #908caa; --color-nms-text-muted: #6e6a86;
+  --color-background: #232136; --color-foreground: #e0def4; --color-card: #2a273f; --color-card-foreground: #e0def4;
+  --color-popover: #2a273f; --color-popover-foreground: #e0def4; --color-primary: #ea9a97; --color-primary-foreground: #232136;
+  --color-secondary: #393552; --color-muted: #393552; --color-border: #393552; --color-input: #393552; --color-ring: #ea9a97;
+}
+[data-theme="rose-pine-dawn"] {
+  --color-nms-bg: #faf4ed; --color-nms-panel: #fffaf3; --color-nms-panel-hover: #f2e9e1;
+  --color-nms-border: #f2e9e1; --color-nms-border-light: #9893a5;
+  --color-nms-accent: #b4637a; --color-nms-gold: #ea9d34; --color-nms-text: #575279; --color-nms-text-dim: #6e6a86; --color-nms-text-muted: #9893a5;
+  --color-background: #faf4ed; --color-foreground: #575279; --color-card: #fffaf3; --color-card-foreground: #575279;
+  --color-popover: #fffaf3; --color-popover-foreground: #575279; --color-primary: #b4637a; --color-primary-foreground: #faf4ed;
+  --color-secondary: #f2e9e1; --color-secondary-foreground: #575279; --color-muted: #f2e9e1; --color-muted-foreground: #6e6a86;
+  --color-border: #f2e9e1; --color-input: #f2e9e1; --color-ring: #b4637a;
+}
+[data-theme="catppuccin-mocha"] {
+  --color-nms-bg: #1e1e2e; --color-nms-panel: #313244; --color-nms-panel-hover: #45475a;
+  --color-nms-border: #313244; --color-nms-border-light: #585b70;
+  --color-nms-accent: #89b4fa; --color-nms-gold: #f9e2af; --color-nms-text: #cdd6f4; --color-nms-text-dim: #a6adc8; --color-nms-text-muted: #6c7086;
+  --color-background: #1e1e2e; --color-foreground: #cdd6f4; --color-card: #313244; --color-card-foreground: #cdd6f4;
+  --color-popover: #313244; --color-popover-foreground: #cdd6f4; --color-primary: #89b4fa; --color-primary-foreground: #1e1e2e;
+  --color-secondary: #313244; --color-muted: #45475a; --color-border: #313244; --color-input: #313244; --color-ring: #89b4fa;
+}
+[data-theme="catppuccin-macchiato"] {
+  --color-nms-bg: #24273a; --color-nms-panel: #363a4f; --color-nms-panel-hover: #494d64;
+  --color-nms-border: #363a4f; --color-nms-border-light: #5b6078;
+  --color-nms-accent: #8aadf4; --color-nms-gold: #eed49f; --color-nms-text: #cad3f5; --color-nms-text-dim: #a5adcb; --color-nms-text-muted: #6e738d;
+  --color-background: #24273a; --color-foreground: #cad3f5; --color-card: #363a4f; --color-card-foreground: #cad3f5;
+  --color-popover: #363a4f; --color-popover-foreground: #cad3f5; --color-primary: #8aadf4; --color-primary-foreground: #24273a;
+  --color-secondary: #363a4f; --color-muted: #494d64; --color-border: #363a4f; --color-input: #363a4f; --color-ring: #8aadf4;
+}
+[data-theme="catppuccin-frappe"] {
+  --color-nms-bg: #303446; --color-nms-panel: #414559; --color-nms-panel-hover: #51576d;
+  --color-nms-border: #414559; --color-nms-border-light: #626880;
+  --color-nms-accent: #8caaee; --color-nms-gold: #eebebe; --color-nms-text: #c6d0f5; --color-nms-text-dim: #a5adce; --color-nms-text-muted: #626880;
+  --color-background: #303446; --color-foreground: #c6d0f5; --color-card: #414559; --color-card-foreground: #c6d0f5;
+  --color-popover: #414559; --color-popover-foreground: #c6d0f5; --color-primary: #8caaee; --color-primary-foreground: #303446;
+  --color-secondary: #414559; --color-muted: #51576d; --color-border: #414559; --color-input: #414559; --color-ring: #8caaee;
+}
+[data-theme="catppuccin-latte"] {
+  --color-nms-bg: #eff1f5; --color-nms-panel: #e6e9ef; --color-nms-panel-hover: #ccd0da;
+  --color-nms-border: #ccd0da; --color-nms-border-light: #9ca0b0;
+  --color-nms-accent: #1e66f5; --color-nms-gold: #df8e1d; --color-nms-text: #4c4f69; --color-nms-text-dim: #6c6f85; --color-nms-text-muted: #9ca0b0;
+  --color-background: #eff1f5; --color-foreground: #4c4f69; --color-card: #e6e9ef; --color-card-foreground: #4c4f69;
+  --color-popover: #e6e9ef; --color-popover-foreground: #4c4f69; --color-primary: #1e66f5; --color-primary-foreground: #eff1f5;
+  --color-secondary: #ccd0da; --color-muted: #ccd0da; --color-border: #ccd0da; --color-input: #ccd0da; --color-ring: #1e66f5;
+}
+
 body {
-  height: 100%;
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Inter, system-ui, sans-serif;
-  margin: 0;
-  font-size: 14px;
-}
-
-button {
-  cursor: pointer;
-}
-
-table {
-  border-collapse: collapse;
-  width: 100%;
-}
-
-th,
-td {
-  text-align: left;
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--border);
-  font-size: 13px;
-}
-
-th {
-  color: var(--muted-foreground);
-  font-weight: 600;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  position: sticky;
-  top: 0;
-  background: var(--card);
-}
-
-tr.selected td {
-  background: rgba(124, 58, 237, 0.25);
-}
-
-tr:hover td {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-tr.selected:hover td {
-  background: rgba(124, 58, 237, 0.35);
+  font-family: var(--font-sans, 'Inter', system-ui, sans-serif);
+  background: var(--color-nms-bg);
+  color: var(--color-nms-text);
 }
