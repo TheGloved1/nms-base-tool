@@ -69,6 +69,8 @@
 
   // --- dialogs ---
   let viewing: { title: string; text: string } | null = $state(null);
+  let exportOpen = $state(false);
+  let exportFormat: "json" | "nmsbase" = $state("json");
   let importing = $state(false);
   let importText = $state("");
   let importingBusy = $state(false);
@@ -268,9 +270,27 @@
     return `${stem}.${ext}`;
   }
 
-  async function doExport() {
+  function openExportDialog() {
+    if (selectedBaseObj()) {
+      exportFormat = "json";
+      exportOpen = true;
+    } else {
+      toastErr("Select a base first");
+    }
+  }
+
+  async function doExportConfirm() {
     const b = selectedBaseObj();
     if (!b) return toastErr("Select a base first");
+    exportOpen = false;
+    if (exportFormat === "nmsbase") {
+      await doExportNmsbase(b);
+    } else {
+      await doExportJson(b);
+    }
+  }
+
+  async function doExportJson(b: BaseSummary) {
     try {
       const dest = await save({
         title: `Export '${b.display_name}' as JSON`,
@@ -291,8 +311,8 @@
     }
   }
 
-  async function doExportNmsbase() {
-    const b = selectedBaseObj();
+  async function doExportNmsbase(b?: BaseSummary) {
+    b ??= selectedBaseObj();
     if (!b) return toastErr("Select a base first");
     try {
       const dest = await save({
@@ -430,9 +450,8 @@
   function onKey(e: KeyboardEvent) {
     const t = e.target as HTMLElement;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
-    if (viewing || importing || restoring || recompressMode || settingsOpen) return;
-    if (e.key === "e") doExport();
-    else if (e.key === "E") doExportNmsbase();
+    if (viewing || importing || restoring || recompressMode || settingsOpen || exportOpen) return;
+    if (e.key === "e" || e.key === "E") openExportDialog();
     else if (e.key === "v") doView();
     else if (e.key === "i") importing = true;
     else if (e.key === "r") recompressMode = "output";
@@ -685,7 +704,7 @@
                 <Table.Row
                   class="cursor-pointer {b.idx === selectedBase ? 'bg-primary/10 hover:bg-primary/15' : ''}"
                   onclick={() => (selectedBase = b.idx)}
-                  ondblclick={doExport}
+                  ondblclick={openExportDialog}
                 >
                   <Table.Cell class="font-mono text-muted-foreground">{b.idx}</Table.Cell>
                   <Table.Cell>
@@ -714,11 +733,8 @@
 
       <!-- action bar -->
       <div class="flex shrink-0 flex-wrap items-center gap-2 border-t border-border bg-card px-3 py-2">
-        <Button size="sm" onclick={doExport} disabled={selectedBase === null} title="Shortcut [e]">
-          <Upload class="size-3.5" />Export
-        </Button>
-        <Button size="sm" variant="outline" onclick={doExportNmsbase} disabled={selectedBase === null} title="Shortcut [E]">
-          <FileJson class="size-3.5" />NMSBASE
+        <Button size="sm" onclick={openExportDialog} disabled={selectedBase === null} title="Shortcut [e]">
+          <Upload class="size-3.5" />Export…
         </Button>
         <Button size="sm" variant="outline" onclick={doView} disabled={selectedBase === null} title="Shortcut [v]">
           <Eye class="size-3.5" />View
@@ -769,6 +785,50 @@
       </div>
     {/each}
   </div>
+
+  <!-- export format dialog -->
+  <Dialog.Root bind:open={exportOpen}>
+    <Dialog.Content class="max-w-md">
+      <Dialog.Header>
+        <Dialog.Title>Export '{selectedBaseObj()?.display_name ?? ""}'</Dialog.Title>
+        <Dialog.Description>Choose a format — you'll pick where to save it next.</Dialog.Description>
+      </Dialog.Header>
+      <div class="flex flex-col gap-2 py-1">
+        <button
+          class="rounded-lg border p-3 text-left transition {exportFormat === 'json'
+            ? 'border-primary bg-primary/10'
+            : 'border-border hover:bg-muted'}"
+          onclick={() => (exportFormat = "json")}
+        >
+          <div class="flex items-center gap-2 text-sm font-medium">
+            <FileJson class="size-4 text-primary" />Full JSON <Badge variant="default">.json</Badge>
+          </div>
+          <p class="mt-1 text-xs text-muted-foreground">
+            Complete base data. Paste into Base Builder via <span class="font-medium">Import base from NMS</span>.
+          </p>
+        </button>
+        <button
+          class="rounded-lg border p-3 text-left transition {exportFormat === 'nmsbase'
+            ? 'border-primary bg-primary/10'
+            : 'border-border hover:bg-muted'}"
+          onclick={() => (exportFormat = "nmsbase")}
+        >
+          <div class="flex items-center gap-2 text-sm font-medium">
+            <FileJson class="size-4 text-amber-400" />NMSBASE <Badge variant="outline">.nmsbase</Badge>
+          </div>
+          <p class="mt-1 text-xs text-muted-foreground">
+            Objects only. Paste into NomNom / NMSSE after the <span class="font-mono">^BASE_FLAG</span> entry.
+          </p>
+        </button>
+      </div>
+      <Dialog.Footer>
+        <Button variant="outline" onclick={() => (exportOpen = false)}>Cancel</Button>
+        <Button onclick={doExportConfirm}>
+          <Upload class="size-3.5" />Save…
+        </Button>
+      </Dialog.Footer>
+    </Dialog.Content>
+  </Dialog.Root>
 
   <!-- view dialog -->
   <Dialog.Root open={viewing !== null} onOpenChange={(o) => !o && (viewing = null)}>
