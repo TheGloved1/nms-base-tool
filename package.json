@@ -1,0 +1,42 @@
+{
+  "name": "nms-save-editor",
+  "private": true,
+  "version": "26.9.0",
+  "type": "module",
+  "packageManager": "bun",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "prepare": "svelte-kit sync || echo ''",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "tauri": "tauri",
+    "sync-version": "bun run scripts/sync-version.js",
+    "release": "bun scripts/release.ts",
+    "push-tags": "git push origin main --tags",
+    "release:no-changelog": "bun scripts/release.ts --no-changelog"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2",
+    "@tauri-apps/plugin-fs": "^2",
+    "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-store": "^2",
+    "@tauri-apps/plugin-updater": "^2"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@sveltejs/kit": "^2.65.1",
+    "@sveltejs/vite-plugin-svelte": "^7.1.2",
+    "@tailwindcss/vite": "^4.3.0",
+    "@tauri-apps/cli": "^2",
+    "@types/node": "^25.9.1",
+    "svelte": "^5.56.3",
+    "svelte-check": "^4.6.0",
+    "tailwindcss": "^4.3.0",
+    "typescript": "~6.0.3",
+    "vite": "^8.0.16"
+  }
+}

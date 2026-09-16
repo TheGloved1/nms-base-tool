@@ -1,0 +1,144 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows-x86_64
+          - os: ubuntu-latest
+            platform: linux-x86_64
+          - os: macos-latest
+            platform: darwin-aarch64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Install system deps (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Install WiX (Windows)
+        if: matrix.os == 'windows-latest'
+        run: dotnet tool install --global wix --version 4.0.5
+
+      - name: Verify tag matches package.json
+        shell: bash
+        run: |
+          TAG_VER="${GITHUB_REF_NAME#v}"
+          PKG_VER="$(bun -e "console.log(require('./package.json').version)")"
+          if [ "$TAG_VER" != "$PKG_VER" ]; then
+            echo "Tag version ($TAG_VER) does not match package.json ($PKG_VER)"
+            exit 1
+          fi
+          echo "Version OK: $PKG_VER"
+
+      - name: Install frontend dependencies
+        run: bun install
+
+      - name: Sync version to Cargo.toml and tauri.conf.json
+        run: bun scripts/sync-version.js
+
+      - name: Build Tauri app
+        run: bun tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+
+      - name: Generate updater fragment
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: bash scripts/generate-updater-json.sh
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: bundles-${{ matrix.platform }}
+          path: |
+            updater-${{ matrix.platform }}.json
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/rpm/*.rpm
+            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/macos/*.tar.gz
+          if-no-files-found: warn
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Download all bundles
+        uses: actions/download-artifact@v7
+
+      - name: Combine updater fragments
+        shell: bash
+        run: |
+          PKG_VER="$(bun -e "console.log(require('./package.json').version)")"
+          TAG_NAME="v${PKG_VER}"
+
+          jq -s '{
+            version: .[0].version,
+            pub_date: .[0].pub_date,
+            platforms: (reduce .[] as $item ({}; . * ($item.platforms // {})))
+          }' bundles-*/updater-*.json > updater-tmp.json
+
+          NOTES=""
+          CHANGELOG="changelogs/${TAG_NAME}.md"
+          [ -f "$CHANGELOG" ] && NOTES=$(cat "$CHANGELOG")
+          jq --arg notes "$NOTES" '.notes = $notes' updater-tmp.json > updater.json
+          rm -f updater-tmp.json
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            bundles-windows-x86_64/**/*.msi
+            bundles-linux-x86_64/**/*.deb
+            bundles-linux-x86_64/**/*.AppImage
+            bundles-linux-x86_64/**/*.rpm
+            bundles-darwin-aarch64/**/*.dmg
+            bundles-darwin-aarch64/**/*.tar.gz
+            updater.json
+          body_path: changelogs/${{ github.ref_name }}.md
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-beta.') }}

@@ -1,0 +1,82 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "nms-save-editor",
+  "version": "26.9.0",
+  "identifier": "dev.gloved.nms-save-editor",
+  "build": {
+    "beforeDevCommand": "bun run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "bun run build",
+    "frontendDist": "../build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "NMS Save Editor",
+        "width": 1200,
+        "height": 800,
+        "center": true,
+        "scrollBarStyle": "fluentOverlay"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "createUpdaterArtifacts": true,
+    "category": "Utility",
+    "windows": {
+      "allowDowngrades": true,
+      "nsis": {
+        "installerIcon": "icons/icon.ico"
+      },
+      "webviewInstallMode": {
+        "silent": true,
+        "type": "downloadBootstrapper"
+      }
+    },
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": false,
+        "files": {}
+      },
+      "deb": {
+        "files": {}
+      },
+      "rpm": {
+        "epoch": 0,
+        "files": {},
+        "release": "1"
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "12.0"
+    },
+    "homepage": "https://github.com/TheGloved1/nms-save-editor",
+    "active": true,
+    "targets": [
+      "msi",
+      "deb",
+      "appimage",
+      "rpm",
+      "app",
+      "dmg"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/TheGloved1/nms-save-editor/releases/latest/download/updater.json"
+      ],
+      "pubkey": "TODO: generate with `bun tauri signer generate` and paste public key here"
+    }
+  }
+}
